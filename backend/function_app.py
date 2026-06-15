@@ -565,7 +565,6 @@ def create_checkout_session(req: func.HttpRequest) -> func.HttpResponse:
         stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
         session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
             success_url=f"{FRONTEND_URL}/checkout-success?session_id={{CHECKOUT_SESSION_ID}}",
