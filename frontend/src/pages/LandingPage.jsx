@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import logoManoa from '../logo-manoa.png';
 
 const NAVY = '#1E3A6A';
 const RED  = '#B22234';
@@ -312,7 +313,7 @@ function LogoBrand({ centered }) {
       display: 'flex', alignItems: 'center', gap: 10,
       justifyContent: centered ? 'center' : 'flex-start',
     }}>
-      <FlagSVG />
+      <img src={logoManoa} alt="MANOA" style={{ height: 28 }} />
       <div>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: '1.15rem', letterSpacing: '.5px' }}>
           MANOA
@@ -328,14 +329,3 @@ function LogoBrand({ centered }) {
   );
 }
 
-function FlagSVG() {
-  return (
-    <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
-      <rect width="28" height="20" rx="3" fill="#B22234"/>
-      <rect y="2.9"  width="28" height="2"   fill="white"/>
-      <rect y="7.8"  width="28" height="2"   fill="white"/>
-      <rect y="12.7" width="28" height="2"   fill="white"/>
-      <rect width="12" height="10.8" rx="2" fill="#3C5A99"/>
-    </svg>
-  );
-}

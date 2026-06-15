@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import logoManoa from '../logo-manoa.png';
 
 const styles = {
   nav: {
@@ -51,7 +52,7 @@ export default function Layout({ children }) {
     <>
       <nav style={styles.nav}>
         <Link to="/dashboard" style={styles.logo}>
-          <Flag />
+          <img src={logoManoa} alt="MANOA" style={{ height: 32 }} />
           <span>
             <span style={styles.logoText}>MANOA</span>
             <span style={styles.logoSub}>Custom English</span>
@@ -73,19 +74,3 @@ export default function Layout({ children }) {
   );
 }
 
-function Flag() {
-  return (
-    <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
-      <rect width="28" height="20" rx="3" fill="#B22234"/>
-      <rect y="0"  width="28" height="2.9" fill="#B22234"/>
-      <rect y="2.9" width="28" height="2" fill="white"/>
-      <rect y="4.9" width="28" height="2.9" fill="#B22234"/>
-      <rect y="7.8" width="28" height="2" fill="white"/>
-      <rect y="9.8" width="28" height="2.9" fill="#B22234"/>
-      <rect y="12.7" width="28" height="2" fill="white"/>
-      <rect y="14.7" width="28" height="2.9" fill="#B22234"/>
-      <rect y="17.6" width="28" height="2.4" fill="#B22234"/>
-      <rect width="12" height="10.8" rx="2" fill="#3C5A99"/>
-    </svg>
-  );
-}
