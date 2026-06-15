@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import { SubscriptionProvider, useSubscription } from './contexts/SubscriptionContext';
 
 import LandingPage     from './pages/LandingPage';
+import Planos          from './pages/Planos';
 import Login           from './pages/Login';
 import Register        from './pages/Register';
 import ForgotPass      from './pages/ForgotPassword';
@@ -69,6 +70,7 @@ export default function App() {
           <Routes>
             {/* Public */}
             <Route path="/"              element={<LandingPage />} />
+            <Route path="/planos"        element={<Planos />} />
             <Route path="/login"         element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/cadastro"      element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="/esqueci-senha" element={<PublicRoute><ForgotPass /></PublicRoute>} />
@@ -76,6 +78,7 @@ export default function App() {
             {/* Auth-only (no subscription required) */}
             <Route path="/checkout"         element={<PrivateRoute><Checkout /></PrivateRoute>} />
             <Route path="/checkout-success" element={<PrivateRoute><CheckoutSuccess /></PrivateRoute>} />
+            <Route path="/sucesso"          element={<PrivateRoute><CheckoutSuccess /></PrivateRoute>} />
 
             {/* Subscription required */}
             <Route path="/dashboard"           element={<SubscribedRoute><Dashboard /></SubscribedRoute>} />

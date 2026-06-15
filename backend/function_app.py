@@ -64,6 +64,8 @@ def verify_firebase_token(req: func.HttpRequest):
 
 
 ALLOWED_ORIGINS = {
+    "https://manoacustomenglish.com",
+    "https://www.manoacustomenglish.com",
     "https://purple-smoke-0a58d0f0f.7.azurestaticapps.net",
     "http://localhost:3000",
     "http://localhost:3001",
@@ -495,7 +497,7 @@ Return ONLY the JSON array, nothing else."""
 
 # ── Subscription endpoints ────────────────────────────────────────────────────
 
-FRONTEND_URL = "https://purple-smoke-0a58d0f0f.7.azurestaticapps.net"
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://manoacustomenglish.com")
 
 PLAN_PRICE_IDS = lambda: {
     "20": os.environ.get("STRIPE_PRICE_ID_20", ""),
@@ -567,8 +569,8 @@ def create_checkout_session(req: func.HttpRequest) -> func.HttpResponse:
         session = stripe.checkout.Session.create(
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
-            success_url=f"{FRONTEND_URL}/checkout-success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{FRONTEND_URL}/?planos=1",
+            success_url=f"{FRONTEND_URL}/sucesso?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{FRONTEND_URL}/planos",
             client_reference_id=uid,
             metadata={"uid": uid, "plano": plan},
             subscription_data={"metadata": {"uid": uid, "plano": plan}},
