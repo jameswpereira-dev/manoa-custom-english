@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { auth } from './firebase';
 
-const BASE = process.env.REACT_APP_FUNCTION_URL;
+const BASE = process.env.REACT_APP_FUNCTION_URL || 'https://func-manoa-custom-english.azurewebsites.net';
 
 async function authHeaders() {
   const user = auth.currentUser;
