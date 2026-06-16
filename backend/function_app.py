@@ -567,10 +567,17 @@ def create_checkout_session(req: func.HttpRequest) -> func.HttpResponse:
         stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
         session = stripe.checkout.Session.create(
+            payment_method_types=["card", "boleto", "pix"],
+            payment_method_options={
+                "boleto": {
+                    "expires_after_days": 3,
+                },
+            },
+            customer_creation="always",
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
-            success_url=f"{FRONTEND_URL}/sucesso?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{FRONTEND_URL}/planos",
+            success_url="https://manoacustomenglish.com/sucesso?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url="https://manoacustomenglish.com/?planos=1",
             client_reference_id=uid,
             metadata={"uid": uid, "plano": plan},
             subscription_data={"metadata": {"uid": uid, "plano": plan}},
