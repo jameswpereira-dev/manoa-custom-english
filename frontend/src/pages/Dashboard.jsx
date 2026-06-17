@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Btn    from '../components/Btn';
+import PlanPicker from '../components/PlanPicker';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { getWords, deleteWord } from '../services/api';
 
 export default function Dashboard() {
   const { user }              = useAuth();
-  const { subscription }      = useSubscription();
+  const { subscription, loading: subLoading } = useSubscription();
   const nav                   = useNavigate();
   const [words, setWords]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,24 @@ export default function Dashboard() {
     w.palavra?.toLowerCase().includes(search.toLowerCase()) ||
     w.contexto?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const isSubscribed = subscription && subscription.status === 'ativo';
+
+  if (subLoading) {
+    return (
+      <Layout>
+        <div style={{ textAlign:'center', padding:80, color:'#94a3b8' }}>Carregando…</div>
+      </Layout>
+    );
+  }
+
+  if (!isSubscribed) {
+    return (
+      <Layout>
+        <PlanPicker />
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

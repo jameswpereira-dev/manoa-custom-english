@@ -5,7 +5,7 @@ import Input    from '../components/Input';
 import Btn      from '../components/Btn';
 import {
   auth, createUserWithEmailAndPassword, updateProfile,
-  signInWithPopup, googleProvider,
+  signInWithPopup, googleProvider, sendEmailVerification,
 } from '../services/firebase';
 
 export default function Register() {
@@ -13,6 +13,9 @@ export default function Register() {
   const [searchParams] = [new URLSearchParams(window.location.search)];
   const plan = searchParams.get('plan');
   const dest = plan ? `/checkout?plan=${plan}` : '/dashboard';
+  const continueUrl = plan
+    ? `https://manoacustomenglish.com/login?plan=${plan}`
+    : 'https://manoacustomenglish.com/login';
 
   const [nome,  setNome]    = useState('');
   const [email, setEmail]   = useState('');
@@ -31,7 +34,8 @@ export default function Register() {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, senha);
       await updateProfile(cred.user, { displayName: nome });
-      nav(dest);
+      await sendEmailVerification(cred.user, { url: continueUrl });
+      nav('/verificar-email', { state: { email } });
     } catch (err) {
       setError(mapError(err.code));
     } finally { setLoading(false); }

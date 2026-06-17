@@ -24,7 +24,11 @@ export default function Login() {
     e.preventDefault();
     setError(''); setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, senha);
+      const cred = await signInWithEmailAndPassword(auth, email, senha);
+      if (!cred.user.emailVerified) {
+        nav('/verificar-email', { state: { email } });
+        return;
+      }
       nav(dest);
     } catch (err) {
       setError(mapError(err.code));

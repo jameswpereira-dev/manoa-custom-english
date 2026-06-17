@@ -8,6 +8,7 @@ import Planos          from './pages/Planos';
 import Login           from './pages/Login';
 import Register        from './pages/Register';
 import ForgotPass      from './pages/ForgotPassword';
+import VerifyEmail     from './pages/VerifyEmail';
 import Checkout        from './pages/Checkout';
 import CheckoutSuccess from './pages/CheckoutSuccess';
 import Dashboard       from './pages/Dashboard';
@@ -16,8 +17,6 @@ import Study           from './pages/Study';
 import Exercises       from './pages/Exercises';
 import MultiExercises  from './pages/MultiExercises';
 import Dictation       from './pages/Dictation';
-
-// ── Route guards ──────────────────────────────────────────────────────────────
 
 function PublicRoute({ children }) {
   const { user, loading } = useAuth();
@@ -30,10 +29,20 @@ function PublicRoute({ children }) {
   return children;
 }
 
+function VerifyRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <FullLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.emailVerified) return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <FullLoader />;
-  return user ? children : <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.emailVerified) return <Navigate to="/verificar-email" replace />;
+  return children;
 }
 
 function SubscribedRoute({ children }) {
@@ -42,13 +51,12 @@ function SubscribedRoute({ children }) {
 
   if (authLoading || (user && subLoading)) return <FullLoader />;
   if (!user) return <Navigate to="/login" replace />;
+  if (!user.emailVerified) return <Navigate to="/verificar-email" replace />;
   if (!subscription || subscription.status !== 'ativo') {
-    return <Navigate to="/?planos=1" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 }
-
-// ── Spinner ───────────────────────────────────────────────────────────────────
 
 function FullLoader() {
   return (
@@ -60,28 +68,24 @@ function FullLoader() {
   );
 }
 
-// ── App ───────────────────────────────────────────────────────────────────────
-
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <SubscriptionProvider>
           <Routes>
-            {/* Public */}
             <Route path="/"              element={<LandingPage />} />
             <Route path="/planos"        element={<Planos />} />
             <Route path="/login"         element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/cadastro"      element={<PublicRoute><Register /></PublicRoute>} />
             <Route path="/esqueci-senha" element={<PublicRoute><ForgotPass /></PublicRoute>} />
+            <Route path="/verificar-email" element={<VerifyRoute><VerifyEmail /></VerifyRoute>} />
 
-            {/* Auth-only (no subscription required) */}
             <Route path="/checkout"         element={<PrivateRoute><Checkout /></PrivateRoute>} />
             <Route path="/checkout-success" element={<PrivateRoute><CheckoutSuccess /></PrivateRoute>} />
             <Route path="/sucesso"          element={<PrivateRoute><CheckoutSuccess /></PrivateRoute>} />
+            <Route path="/dashboard"        element={<PrivateRoute><Dashboard /></PrivateRoute>} />
 
-            {/* Subscription required */}
-            <Route path="/dashboard"           element={<SubscribedRoute><Dashboard /></SubscribedRoute>} />
             <Route path="/upload"              element={<SubscribedRoute><Upload /></SubscribedRoute>} />
             <Route path="/estudo/:wordId"      element={<SubscribedRoute><Study /></SubscribedRoute>} />
             <Route path="/exercicios/:wordId"  element={<SubscribedRoute><Exercises /></SubscribedRoute>} />
