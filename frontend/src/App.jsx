@@ -22,7 +22,8 @@ function PublicRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) return null;
-  if (user) {
+  if (user && !user.emailVerified) return <Navigate to="/verificar-email" replace />;
+  if (user && user.emailVerified) {
     const plan = new URLSearchParams(location.search).get('plan');
     return <Navigate to={plan ? `/checkout?plan=${plan}` : '/dashboard'} replace />;
   }
