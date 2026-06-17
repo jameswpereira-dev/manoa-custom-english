@@ -8,23 +8,19 @@ export default function Checkout() {
   const [searchParams] = useSearchParams();
   const nav            = useNavigate();
   const plan           = searchParams.get('plan');
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
+  const [error, setError] = useState('');
 
   const startCheckout = () => {
-    setLoading(true);
     setError('');
     createCheckoutSession(parseInt(plan, 10))
       .then(data => {
         if (data?.url) {
           window.location.href = data.url;
         } else {
-          setLoading(false);
           setError('Não foi possível criar a sessão de pagamento.');
         }
       })
       .catch(err => {
-        setLoading(false);
         setError(err.response?.data?.error || 'Erro ao iniciar o checkout. Tente novamente.');
       });
   };
