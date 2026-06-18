@@ -613,10 +613,11 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
     try:
         if event["type"] == "checkout.session.completed":
             session  = event["data"]["object"]
-            uid      = session.get("client_reference_id")
-            plano    = int(session.get("metadata", {}).get("plano", 0))
-            cus_id   = session.get("customer")
-            sub_id   = session.get("subscription")
+            uid      = getattr(session, "client_reference_id", None)
+            metadata = getattr(session, "metadata", {}) or {}
+            plano    = int(getattr(metadata, "plano", 0) or 0)
+            cus_id   = getattr(session, "customer", None)
+            sub_id   = getattr(session, "subscription", None)
 
             if uid and plano:
                 renovacao = (datetime.utcnow() + timedelta(days=30)).isoformat()
@@ -634,10 +635,9 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
 
         elif event["type"] == "invoice.payment_succeeded":
             invoice    = event["data"]["object"]
-            cus_id     = invoice.get("customer")
-            billing_reason = invoice.get("billing_reason", "")
+            cus_id     = getattr(invoice, "customer", None)
+            billing_reason = getattr(invoice, "billing_reason", "") or ""
 
-            # Only handle renewals (initial is covered by checkout.session.completed)
             if billing_reason == "subscription_cycle":
                 items = list(users_container.query_items(
                     query="SELECT * FROM c WHERE c.stripe_customer_id = @cid",
@@ -656,7 +656,7 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
 
         elif event["type"] == "customer.subscription.deleted":
             subscription = event["data"]["object"]
-            cus_id       = subscription.get("customer")
+            cus_id       = getattr(subscription, "customer", None)
             items = list(users_container.query_items(
                 query="SELECT * FROM c WHERE c.stripe_customer_id = @cid",
                 parameters=[{"name": "@cid", "value": cus_id}],
@@ -670,7 +670,6 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
 
     except Exception as e:
         logging.error(f"[stripe-webhook] processing error: {e}")
-        # Return 200 to prevent Stripe retries for processing errors
         return func.HttpResponse(json.dumps({"ok": False, "error": str(e)}),
                                  status_code=200, mimetype="application/json")
 
