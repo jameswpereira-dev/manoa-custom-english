@@ -35,12 +35,12 @@ jobs:
           source venv/bin/activate
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt --target="backend/.python_packages/lib/site-packages"
+        run: pip install -r requirements.txt
 
       # Optional: Add step to run tests here
 
       - name: Zip artifact for deployment
-        run: cd backend && zip -r ../release.zip . -x "venv/*" "*.pyc"
+        run: zip release.zip ./* -r
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -67,13 +67,13 @@ jobs:
         run: |
           unzip release.zip
           rm release.zip
-
+        
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_28D1F8EA83384AF6986F4342111A7399 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F549301920B84D70B9F922F73689F2A2 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_2EAB23B89C6C45E5BF036492080A0220 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_CCC313127ADF4618910A42397ACD6C2E }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_6EAE1CDDB9824E03BF5C18E140E2F872 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_6A54625210204D8F87E2B26FE474D2A4 }}
 
       - name: 'Deploy to Azure Functions'
         uses: Azure/functions-action@v1
@@ -82,3 +82,4 @@ jobs:
           app-name: 'func-manoa-custom-english'
           slot-name: 'Production'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+          
