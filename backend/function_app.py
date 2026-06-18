@@ -675,3 +675,10 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
 
     return func.HttpResponse(json.dumps({"ok": True}),
                              status_code=200, mimetype="application/json")
+
+@app.route(route="version-check", methods=["GET"])
+def version_check(req: func.HttpRequest) -> func.HttpResponse:
+    return func.HttpResponse(
+        json.dumps({"version": "getattr-fix-2026-06-18", "deployed": True}),
+        status_code=200, mimetype="application/json"
+    )
