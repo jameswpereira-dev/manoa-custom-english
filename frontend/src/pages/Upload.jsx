@@ -8,7 +8,6 @@ import { processContent, generateWords } from '../services/api';
 const MODES = [
   { id:'A', label:'Lista de palavras',      icon:'📝', desc:'Digite ou cole palavras em inglês' },
   { id:'B', label:'Gerar automaticamente',  icon:'✨', desc:'IA sugere vocabulário para sua profissão' },
-  { id:'C', label:'Upload de arquivo',      icon:'📄', desc:'PDF ou Word — extrai vocabulário automaticamente' },
 ];
 
 const QTY_OPTIONS = [5, 10, 15, 20];
@@ -30,10 +29,9 @@ export default function Upload() {
   const [error,   setError]   = useState('');
   const [progress, setProgress] = useState('');
 
-  // Mode A/C state
+  // Mode A state
   const [words,   setWords]   = useState('');
   const [context, setContext] = useState('');
-  const [file,    setFile]    = useState(null);
 
   // Mode B state
   const [profession,     setProfession]     = useState('');
@@ -42,28 +40,17 @@ export default function Upload() {
   const [selectedItems,  setSelectedItems]  = useState(new Set());
   const [generating,     setGenerating]     = useState(false);
 
-  // ── Mode A / C: normal submit ─────────────────────────────────────────────
+  // ── Mode A: normal submit ─────────────────────────────────────────────────
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(''); setLoading(true);
     setProgress('Enviando conteúdo…');
     try {
-      const payload = { mode };
-      if (mode === 'A') {
-        const list = words.split(/[\n,]+/).map(w => w.trim()).filter(Boolean);
-        if (!list.length) throw new Error('Digite pelo menos uma palavra.');
-        payload.words   = list;
-        payload.context = context;
-      } else {
-        if (!file) throw new Error('Selecione um arquivo PDF ou Word.');
-        const b64 = await toBase64(file);
-        payload.file_b64  = b64;
-        payload.file_name = file.name;
-        payload.context   = context;
-      }
+      const list = words.split(/[\n,]+/).map(w => w.trim()).filter(Boolean);
+      if (!list.length) throw new Error('Digite pelo menos uma palavra.');
       setProgress('Gerando conteúdo com IA… (pode levar até 2 min)');
-      await processContent(payload);
+      await processContent({ mode: 'A', words: list, context });
       setProgress('');
       nav('/dashboard');
     } catch (err) {
@@ -132,7 +119,7 @@ export default function Upload() {
         </p>
 
         {/* Mode selector */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:28 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:10, marginBottom:28 }}>
           {MODES.map(m => (
             <button key={m.id} onClick={() => switchMode(m.id)}
               style={{
@@ -328,53 +315,6 @@ export default function Upload() {
           </form>
         )}
 
-        {/* ── Mode C ────────────────────────────────────────────────────── */}
-        {mode === 'C' && (
-          <form onSubmit={handleSubmit} style={formStyle}>
-            <div style={{ marginBottom:16 }}>
-              <label style={labelStyle}>Arquivo PDF ou Word</label>
-              <div style={{
-                border:'2px dashed #cbd5e1', borderRadius:10, padding:'28px 20px',
-                textAlign:'center', cursor:'pointer', background:'#f8fafc',
-                transition:'border-color .15s',
-              }}
-                onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor='#3C5A99'; }}
-                onDragLeave={e => e.currentTarget.style.borderColor='#cbd5e1'}
-                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setFile(f); }}
-                onClick={() => document.getElementById('fileInput').click()}
-              >
-                <div style={{ fontSize:'2rem', marginBottom:8 }}>📎</div>
-                {file ? (
-                  <p style={{ color:'#3C5A99', fontWeight:500 }}>{file.name}</p>
-                ) : (
-                  <p style={{ color:'#94a3b8', fontSize:'.9rem' }}>
-                    Arraste o arquivo aqui ou <span style={{ color:'#3C5A99', fontWeight:500 }}>clique para selecionar</span>
-                  </p>
-                )}
-              </div>
-              <input id="fileInput" type="file" accept=".pdf,.doc,.docx"
-                style={{ display:'none' }}
-                onChange={e => setFile(e.target.files[0])}
-              />
-            </div>
-            <div style={{ marginBottom:16 }}>
-              <label style={labelStyle}>Contexto (opcional)</label>
-              <input
-                value={context} onChange={e => setContext(e.target.value)}
-                placeholder="ex: documento jurídico, relatório médico…"
-                style={inputStyle}
-              />
-            </div>
-            {error    && <ErrorBox msg={error} />}
-            {progress && <ProgressBox msg={progress} />}
-            <div style={{ display:'flex', gap:10 }}>
-              <Btn type="button" variant="outline" onClick={() => nav('/dashboard')}>Cancelar</Btn>
-              <Btn type="submit" loading={loading} style={{ flex:1 }}>
-                {loading ? 'Processando…' : '🚀 Processar e salvar'}
-              </Btn>
-            </div>
-          </form>
-        )}
       </div>
     </Layout>
   );
@@ -424,15 +364,6 @@ const inputStyle = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function toBase64(file) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.readAsDataURL(file);
-    r.onload  = () => res(r.result.split(',')[1]);
-    r.onerror = rej;
-  });
-}
 
 function Spinner() {
   return (
