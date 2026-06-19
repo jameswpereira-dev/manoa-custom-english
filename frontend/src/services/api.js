@@ -43,6 +43,16 @@ export async function generateWords(profession, quantity) {
   return data;
 }
 
+export async function evaluateScenario(word, scenario, userAnswer) {
+  const headers = await authHeaders();
+  const { data } = await axios.post(
+    `${BASE}/api/evaluate-scenario`,
+    { word, scenario, user_answer: userAnswer },
+    { headers }
+  );
+  return data;
+}
+
 export async function getSubscription() {
   const headers = await authHeaders();
   const { data } = await axios.get(`${BASE}/api/get-subscription`, { headers });

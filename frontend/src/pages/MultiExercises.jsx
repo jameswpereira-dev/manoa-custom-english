@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Btn    from '../components/Btn';
-import { getWords, updateProgress } from '../services/api';
+import { getWords, updateProgress, evaluateScenario } from '../services/api';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,8 +58,8 @@ function buildExerciseSets(selectedWords, allWords) {
 
     const listening = makeListeningExercise(word, allWords);
 
-    // Cap at 6 exercises per word (5 existing + 1 listening)
-    return [...existing, listening].slice(0, 6).map(ex => ({ ...ex, _word: word }));
+    // Cap at 7 exercises per word (6 existing + 1 listening)
+    return [...existing, listening].slice(0, 7).map(ex => ({ ...ex, _word: word }));
   });
 }
 
@@ -86,21 +86,23 @@ function checkAnswer(ex, userAnswer) {
 // ── Labels / colors ───────────────────────────────────────────────────────────
 
 const TYPE_LABEL = {
-  fill_in_the_blank: 'PREENCHER LACUNA',
-  multiple_choice:   'MÚLTIPLA ESCOLHA',
-  true_or_false:     'VERDADEIRO OU FALSO',
-  sentence_building: 'CONSTRUIR FRASE',
-  definition_match:  'DEFINIÇÃO CORRETA',
-  listening:         'OUÇA E RESPONDA',
+  fill_in_the_blank:   'PREENCHER LACUNA',
+  multiple_choice:     'MÚLTIPLA ESCOLHA',
+  true_or_false:       'VERDADEIRO OU FALSO',
+  sentence_building:   'CONSTRUIR FRASE',
+  definition_match:    'DEFINIÇÃO CORRETA',
+  listening:           'OUÇA E RESPONDA',
+  scenario_production: 'CENÁRIO PROFISSIONAL',
 };
 
 const TYPE_COLOR = {
-  fill_in_the_blank: { bg:'#eff6ff', color:'#3C5A99' },
-  multiple_choice:   { bg:'#fef3c7', color:'#92400e' },
-  true_or_false:     { bg:'#f0fdf4', color:'#166534' },
-  sentence_building: { bg:'#fdf4ff', color:'#7e22ce' },
-  definition_match:  { bg:'#fff7ed', color:'#c2410c' },
-  listening:         { bg:'#fff1f2', color:'#9f1239' },
+  fill_in_the_blank:   { bg:'#eff6ff', color:'#3C5A99' },
+  multiple_choice:     { bg:'#fef3c7', color:'#92400e' },
+  true_or_false:       { bg:'#f0fdf4', color:'#166534' },
+  sentence_building:   { bg:'#fdf4ff', color:'#7e22ce' },
+  definition_match:    { bg:'#fff7ed', color:'#c2410c' },
+  listening:           { bg:'#fff1f2', color:'#9f1239' },
+  scenario_production: { bg:'#ecfdf5', color:'#047857' },
 };
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -117,6 +119,8 @@ export default function MultiExercises() {
   const [checked,   setChecked]   = useState({});
   const [input,     setInput]     = useState('');
   const [done,      setDone]      = useState(false);
+  const [evaluations, setEvaluations] = useState({});
+  const [evaluating,  setEvaluating]  = useState(false);
   const audioRef = useRef(null);
 
   useEffect(() => {
@@ -165,6 +169,25 @@ export default function MultiExercises() {
   const check = async () => {
     const ans = answers[step];
     if (!ans) return;
+
+    if (ex.type === 'scenario_production') {
+      setEvaluating(true);
+      try {
+        const result = await evaluateScenario(ex._word?.palavra, ex.question, ans);
+        setEvaluations(e => ({ ...e, [step]: result }));
+        setChecked(c => ({ ...c, [step]: !!result.correto }));
+        try { await updateProgress(ex._word.id, !!result.correto); } catch {}
+      } catch {
+        setEvaluations(e => ({ ...e, [step]: {
+          correto: false, feedback: 'Não foi possível avaliar sua resposta agora. Tente novamente.', sugestao: null,
+        } }));
+        setChecked(c => ({ ...c, [step]: false }));
+      } finally {
+        setEvaluating(false);
+      }
+      return;
+    }
+
     const correct = checkAnswer(ex, ans);
     setChecked(c => ({ ...c, [step]: correct }));
     try { await updateProgress(ex._word.id, correct); } catch {}
@@ -297,6 +320,23 @@ export default function MultiExercises() {
       );
     }
 
+    if (ex.type === 'scenario_production') {
+      return (
+        <textarea
+          value={input}
+          onChange={e => { setInput(e.target.value); setAnswers(a => ({ ...a, [step]: e.target.value })); }}
+          placeholder={`Escreva uma frase usando a palavra "${ex._word?.palavra}"…`}
+          disabled={isChecked || evaluating}
+          rows={3}
+          style={{
+            width:'100%', padding:'11px 14px', resize:'vertical',
+            border:`1.5px solid ${isChecked ? (isCorrect ? '#22c55e' : '#f59e0b') : '#cbd5e1'}`,
+            borderRadius:8, fontSize:'1rem', outline:'none', fontFamily:'inherit',
+          }}
+        />
+      );
+    }
+
     // fill_in_the_blank / sentence_building
     return (
       <input
@@ -316,6 +356,21 @@ export default function MultiExercises() {
 
   const renderFeedback = () => {
     if (!isChecked) return null;
+    if (ex.type === 'scenario_production') {
+      const ev = evaluations[step];
+      if (!ev) return null;
+      return (
+        <div>
+          <p style={{ margin:0 }}>{ev.correto ? '✅ Ótimo uso da palavra!' : '🟡 Quase lá — dá pra melhorar:'}</p>
+          {ev.feedback && <p style={{ margin:'6px 0 0', fontWeight:400 }}>{ev.feedback}</p>}
+          {ev.sugestao && (
+            <p style={{ margin:'8px 0 0', fontWeight:400 }}>
+              💡 Sugestão: <em>"{ev.sugestao}"</em>
+            </p>
+          )}
+        </div>
+      );
+    }
     if (ex.type === 'sentence_building') {
       return isCorrect
         ? `✅ Boa frase! Exemplo: "${ex.answer}"`
@@ -379,8 +434,8 @@ export default function MultiExercises() {
           {isChecked && (
             <div style={{
               marginTop:16, padding:'12px 16px', borderRadius:8,
-              background: isCorrect ? '#dcfce7' : '#fef2f2',
-              color: isCorrect ? '#166534' : '#991b1b',
+              background: isCorrect ? '#dcfce7' : ex.type === 'scenario_production' ? '#fffbeb' : '#fef2f2',
+              color: isCorrect ? '#166534' : ex.type === 'scenario_production' ? '#92400e' : '#991b1b',
               fontWeight:500,
             }}>
               {renderFeedback()}
@@ -394,7 +449,9 @@ export default function MultiExercises() {
           </span>
           <div style={{ display:'flex', gap:10 }}>
             {!isChecked ? (
-              <Btn onClick={check} disabled={!answers[step]}>Verificar</Btn>
+              <Btn onClick={check} disabled={!answers[step] || evaluating}>
+                {evaluating ? 'Avaliando…' : ex.type === 'scenario_production' ? 'Verificar resposta' : 'Verificar'}
+              </Btn>
             ) : (
               <Btn onClick={next}>
                 {step + 1 >= exercises.length ? 'Ver resultado' : 'Próximo →'}

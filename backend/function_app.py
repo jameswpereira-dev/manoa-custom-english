@@ -181,6 +181,11 @@ Generate learning content for a Brazilian Portuguese speaker. Return ONLY valid 
       "question": "Which short phrase best defines '{word}'?",
       "options": ["[correct short definition]", "[wrong definition 1]", "[wrong definition 2]", "[wrong definition 3]"],
       "answer": "[correct short definition]"
+    }},
+    {{
+      "type": "scenario_production",
+      "question": "[a realistic 1-2 sentence professional scenario using the context '{ctx}', ending with a clear instruction: 'Escreva uma frase usando a palavra \\"{word}\\" nessa situação.']",
+      "answer": ""
     }}
   ]
 }}
@@ -191,6 +196,7 @@ Rules:
 - true_or_false answer must be exactly 'true' or 'false' (lowercase)
 - Both options arrays must have exactly 4 distinct items
 - sentence_building answer must be a full, grammatically correct sentence
+- scenario_production has no fixed answer — its "answer" field must stay an empty string
 - Return ONLY the JSON object, no other text"""
 
     msg = client.messages.create(
@@ -490,6 +496,64 @@ Return ONLY the JSON array, nothing else."""
 
     except Exception as e:
         logging.error(f"[generate-words] error: {e}")
+        return func.HttpResponse(json.dumps({"error": str(e)}),
+                                 status_code=500, mimetype="application/json",
+                                 headers=cors_headers(req))
+
+
+@app.route(route="evaluate-scenario", methods=["POST", "OPTIONS"])
+def evaluate_scenario(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return options_response(req)
+
+    try:
+        uid = verify_firebase_token(req)
+    except ValueError as e:
+        return func.HttpResponse(json.dumps({"error": str(e)}), status_code=401,
+                                 mimetype="application/json", headers=cors_headers(req))
+
+    try:
+        body        = req.get_json()
+        word        = body.get("word", "").strip()
+        scenario    = body.get("scenario", "").strip()
+        user_answer = body.get("user_answer", "").strip()
+
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        prompt = f"""You are an English teacher evaluating a Brazilian Portuguese speaker's sentence production exercise.
+
+Scenario given to the student: {scenario}
+Target word: {word}
+Student's sentence: {user_answer}
+
+Evaluate whether the student's sentence uses the word "{word}" correctly and naturally in the context of the scenario above.
+
+Return ONLY valid JSON with exactly this structure:
+{{
+  "correto": true or false,
+  "feedback": "1-2 frases em português explicando o que está bom ou o que precisa ser ajustado",
+  "sugestao": "uma versão melhorada da frase em inglês, se houver algo a melhorar (ou null se a frase já está ótima)"
+}}
+
+Return ONLY the JSON object, no other text."""
+
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw   = msg.content[0].text.strip()
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        result = json.loads(match.group()) if match else {
+            "correto": False, "feedback": "Não foi possível avaliar a resposta.", "sugestao": None
+        }
+
+        return func.HttpResponse(
+            json.dumps(result),
+            status_code=200, mimetype="application/json", headers=cors_headers(req)
+        )
+
+    except Exception as e:
+        logging.error(f"[evaluate-scenario] error: {e}")
         return func.HttpResponse(json.dumps({"error": str(e)}),
                                  status_code=500, mimetype="application/json",
                                  headers=cors_headers(req))
