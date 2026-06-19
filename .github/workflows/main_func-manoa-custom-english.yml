@@ -35,7 +35,14 @@ jobs:
           source venv/bin/activate
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt --target="backend/.python_packages/lib/site-packages"
+        run: |
+          pip install \
+            -r backend/requirements.txt \
+            --target="backend/.python_packages/lib/site-packages" \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --python-version 311 \
+            --only-binary=:all:
 
       - name: Zip artifact for deployment
         run: cd backend && zip -r ../release.zip . -x "venv/*" "*.pyc"
