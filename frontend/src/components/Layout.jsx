@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useSubscription } from '../contexts/SubscriptionContext';
 import logoManoa from '../logo-manoa.png';
 
 const styles = {
@@ -41,6 +42,8 @@ const styles = {
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
+  const { subscription } = useSubscription();
+  const isSubscribed = subscription?.status === 'ativo';
   const nav = useNavigate();
 
   const handleLogout = async () => {
@@ -60,7 +63,7 @@ export default function Layout({ children }) {
         </Link>
         <div style={styles.navActions}>
           <Link to="/dashboard" style={styles.navLink}>Painel</Link>
-          <Link to="/upload"    style={styles.navLink}>+ Palavras</Link>
+          {isSubscribed && <Link to="/upload" style={styles.navLink}>+ Palavras</Link>}
           {user && (
             <span style={{ color:'rgba(255,255,255,.65)', fontSize:'.82rem' }}>
               {user.displayName || user.email}
