@@ -6,7 +6,7 @@ import { useSubscription } from '../contexts/SubscriptionContext';
 import { processContent, generateWords } from '../services/api';
 
 const MODES = [
-  { id:'A', label:'Lista de palavras',      icon:'📝', desc:'Digite ou cole palavras em inglês' },
+  { id:'A', label:'Inserir manualmente',     icon:'📝', desc:'Digite ou cole palavras em inglês' },
   { id:'B', label:'Gerar automaticamente',  icon:'✨', desc:'IA sugere vocabulário para sua profissão' },
 ];
 
