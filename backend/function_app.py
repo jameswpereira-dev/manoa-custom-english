@@ -13,7 +13,7 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 def get_cosmos_container():
     client = CosmosClient.from_connection_string(os.environ["COSMOS_CONNECTION_STRING"])
-    db = client.create_database_if_not_exists("manoa")
+    db = client.create_database_if_not_exists(os.environ.get("COSMOS_DATABASE_NAME", "manoa"))
     return db.create_container_if_not_exists(
         id="words",
         partition_key=PartitionKey(path="/aluno_id"),
@@ -21,7 +21,7 @@ def get_cosmos_container():
 
 def get_users_container():
     client = CosmosClient.from_connection_string(os.environ["COSMOS_CONNECTION_STRING"])
-    db = client.create_database_if_not_exists("manoa")
+    db = client.create_database_if_not_exists(os.environ.get("COSMOS_DATABASE_NAME", "manoa"))
     return db.create_container_if_not_exists(
         id="users",
         partition_key=PartitionKey(path="/aluno_id"),
@@ -70,6 +70,12 @@ ALLOWED_ORIGINS = {
     "http://localhost:3000",
     "http://localhost:3001",
 }
+# Extra origin allowed via env var (used by the staging frontend, whose
+# *.azurestaticapps.net hostname is only known after the first SWA deploy).
+# Unset in production, so prod behavior is unchanged.
+_extra_origin = os.environ.get("EXTRA_ALLOWED_ORIGIN", "").strip()
+if _extra_origin:
+    ALLOWED_ORIGINS.add(_extra_origin)
 
 
 def cors_headers(req: func.HttpRequest = None):
@@ -639,8 +645,8 @@ def create_checkout_session(req: func.HttpRequest) -> func.HttpResponse:
             },
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
-            success_url="https://manoacustomenglish.com/sucesso?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="https://manoacustomenglish.com/?planos=1",
+            success_url=f"{FRONTEND_URL}/sucesso?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{FRONTEND_URL}/?planos=1",
             client_reference_id=uid,
             metadata={"uid": uid, "plano": plan},
             subscription_data={"metadata": {"uid": uid, "plano": plan}},
