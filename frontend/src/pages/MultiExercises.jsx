@@ -24,6 +24,14 @@ function shuffleOptions(ex) {
   return ex;
 }
 
+function makePronunciationIntro(word) {
+  return {
+    type: 'pronunciation_intro',
+    question: 'Palavra nova! Ouça a pronúncia antes de começar os exercícios.',
+    _word: word,
+  };
+}
+
 const FALLBACK_WORDS = ['develop', 'analyze', 'implement', 'optimize', 'configure', 'execute', 'validate', 'deploy'];
 
 function makeListeningExercise(word, allWords) {
@@ -59,7 +67,14 @@ function buildExerciseSets(selectedWords, allWords) {
     const listening = makeListeningExercise(word, allWords);
 
     // Cap at 7 exercises per word (6 existing + 1 listening)
-    return [...existing, listening].slice(0, 7).map(ex => ({ ...ex, _word: word }));
+    const exercises = [...existing, listening].slice(0, 7).map(ex => ({ ...ex, _word: word }));
+
+    // For new words (no prior attempts), prepend a pronunciation intro step
+    if ((word.progresso?.tentativas ?? 0) === 0 && word.audio_url) {
+      return [makePronunciationIntro(word), ...exercises];
+    }
+
+    return exercises;
   });
 }
 
@@ -86,6 +101,7 @@ function checkAnswer(ex, userAnswer) {
 // ── Labels / colors ───────────────────────────────────────────────────────────
 
 const TYPE_LABEL = {
+  pronunciation_intro: 'NOVA PALAVRA — OUÇA',
   fill_in_the_blank:   'PREENCHER LACUNA',
   multiple_choice:     'MÚLTIPLA ESCOLHA',
   true_or_false:       'VERDADEIRO OU FALSO',
@@ -96,6 +112,7 @@ const TYPE_LABEL = {
 };
 
 const TYPE_COLOR = {
+  pronunciation_intro: { bg:'#f0fdf4', color:'#166534' },
   fill_in_the_blank:   { bg:'#eff6ff', color:'#3C5A99' },
   multiple_choice:     { bg:'#fef3c7', color:'#92400e' },
   true_or_false:       { bg:'#f0fdf4', color:'#166534' },
@@ -138,10 +155,10 @@ export default function MultiExercises() {
     }).catch(() => nav('/dashboard'));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-play for listening exercises
+  // Auto-play for listening and pronunciation intro steps
   useEffect(() => {
     const ex = exercises[step];
-    if (ex?.type === 'listening' && ex.audio_url) {
+    if ((ex?.type === 'listening' || ex?.type === 'pronunciation_intro') && ex._word?.audio_url) {
       setTimeout(() => { audioRef.current?.play().catch(() => {}); }, 350);
     }
   }, [step, exercises]);
@@ -200,9 +217,10 @@ export default function MultiExercises() {
   };
 
   const totalCorrect = Object.values(checked).filter(Boolean).length;
+  const scorable = exercises.filter(e => e.type !== 'pronunciation_intro');
 
   if (done) {
-    const pct = Math.round((totalCorrect / exercises.length) * 100);
+    const pct = scorable.length > 0 ? Math.round((totalCorrect / scorable.length) * 100) : 0;
     return (
       <Layout>
         <div style={{ maxWidth:500, margin:'0 auto', textAlign:'center', padding:'40px 20px' }}>
@@ -211,7 +229,7 @@ export default function MultiExercises() {
           </div>
           <h2 style={{ color:'#3C5A99', marginBottom:8 }}>Sessão concluída!</h2>
           <p style={{ color:'#475569', marginBottom:4 }}>
-            Você acertou <strong>{totalCorrect}</strong> de <strong>{exercises.length}</strong> exercícios.
+            Você acertou <strong>{totalCorrect}</strong> de <strong>{scorable.length}</strong> exercícios.
           </p>
           <p style={{ color:'#94a3b8', fontSize:'.9rem', marginBottom:28 }}>
             {wordIds.length} {wordIds.length === 1 ? 'palavra' : 'palavras'} · {pct}% de aproveitamento
@@ -227,6 +245,45 @@ export default function MultiExercises() {
   // ── Render input by type ──────────────────────────────────────────────────
 
   const renderInput = () => {
+    if (ex.type === 'pronunciation_intro') {
+      return (
+        <div style={{ textAlign:'center' }}>
+          <div style={{ fontSize:'2.4rem', fontWeight:800, color:'#1e293b', marginBottom:16 }}>
+            {ex._word.palavra}
+          </div>
+          {ex._word.definicao_pt && (
+            <p style={{
+              color:'#475569', fontSize:'1rem', lineHeight:1.7,
+              marginBottom:24, textAlign:'left',
+              background:'#f8fafc', padding:'14px 16px', borderRadius:8,
+              borderLeft:'3px solid #166534',
+            }}>
+              {ex._word.definicao_pt}
+            </p>
+          )}
+          {ex._word.audio_url && (
+            <div>
+              <button
+                onClick={() => audioRef.current?.play()}
+                style={{
+                  background:'#f0fdf4', border:'3px solid #166534',
+                  borderRadius:60, width:72, height:72, fontSize:'2rem',
+                  cursor:'pointer', display:'inline-flex', alignItems:'center', justifyContent:'center',
+                  boxShadow:'0 4px 14px rgba(22,101,52,.15)',
+                }}
+              >
+                🔊
+              </button>
+              <p style={{ color:'#64748b', fontSize:'.82rem', marginTop:8, lineHeight:1.5 }}>
+                Clique para ouvir novamente. Repita em voz alta.
+              </p>
+              <audio key={ex._word.audio_url} ref={audioRef} src={ex._word.audio_url} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (ex.type === 'listening') {
       return (
         <div>
@@ -448,7 +505,9 @@ export default function MultiExercises() {
             {step + 1} / {exercises.length}
           </span>
           <div style={{ display:'flex', gap:10 }}>
-            {!isChecked ? (
+            {ex.type === 'pronunciation_intro' ? (
+              <Btn onClick={next}>Continuar →</Btn>
+            ) : !isChecked ? (
               <Btn onClick={check} disabled={!answers[step] || evaluating}>
                 {evaluating ? 'Avaliando…' : ex.type === 'scenario_production' ? 'Verificar resposta' : 'Verificar'}
               </Btn>
