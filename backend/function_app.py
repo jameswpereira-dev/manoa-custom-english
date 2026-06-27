@@ -689,8 +689,10 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
         if event["type"] == "checkout.session.completed":
             session  = event["data"]["object"]
             uid      = getattr(session, "client_reference_id", None)
-            metadata = getattr(session, "metadata", {}) or {}
-            plano    = int(getattr(metadata, "plano", 0) or 0)
+            # stripe v15: metadata is a StripeObject without .get(); use .to_dict()
+            _meta    = getattr(session, "metadata", None)
+            metadata = _meta.to_dict() if _meta else {}
+            plano    = int(metadata.get("plano") or 0)
             cus_id   = getattr(session, "customer", None)
             sub_id   = getattr(session, "subscription", None)
 
@@ -792,7 +794,8 @@ def verify_payment(req: func.HttpRequest) -> func.HttpResponse:
                                      status_code=200, mimetype="application/json",
                                      headers=cors_headers(req))
 
-        metadata = session.metadata or {}
+        # stripe v15: Session.metadata is a StripeObject (no .get()); use .to_dict()
+        metadata = session.metadata.to_dict() if session.metadata else {}
         plano    = int(metadata.get("plano") or 0)
         cus_id   = session.customer
         sub_id   = session.subscription
@@ -837,6 +840,6 @@ def verify_payment(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="version-check", methods=["GET"])
 def version_check(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse(
-        json.dumps({"version": "verify-payment-2026-06-27", "deployed": True}),
+        json.dumps({"version": "stripe-v15-metadata-fix-2026-06-27", "deployed": True}),
         status_code=200, mimetype="application/json"
     )
