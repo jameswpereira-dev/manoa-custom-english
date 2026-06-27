@@ -667,9 +667,14 @@ def create_checkout_session(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="stripe-webhook", methods=["POST"])
 def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
     payload    = req.get_body()
-    sig_header = req.headers.get("Stripe-Signature", "")
+    # Azure Functions may lowercase HTTP/2 headers; try both casings
+    sig_header = (req.headers.get("Stripe-Signature") or
+                  req.headers.get("stripe-signature") or "")
     webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
     stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+
+    logging.info(f"[stripe-webhook] received, sig_header present={bool(sig_header)}, "
+                 f"sig_prefix={sig_header[:20]!r}, secret_prefix={webhook_secret[:10]!r}")
 
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
@@ -746,9 +751,92 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse(json.dumps({"ok": True}),
                              status_code=200, mimetype="application/json")
 
+@app.route(route="verify-payment", methods=["POST", "OPTIONS"])
+def verify_payment(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Called by the frontend success page with the Stripe session_id.
+    Retrieves the session directly from Stripe API and activates the subscription
+    in Cosmos without relying on webhook delivery.
+    """
+    if req.method == "OPTIONS":
+        return options_response(req)
+
+    try:
+        uid = verify_firebase_token(req)
+    except ValueError as e:
+        return func.HttpResponse(json.dumps({"error": str(e)}), status_code=401,
+                                 mimetype="application/json", headers=cors_headers(req))
+
+    try:
+        body       = req.get_json()
+        session_id = (body.get("session_id") or "").strip()
+        if not session_id:
+            return func.HttpResponse(json.dumps({"error": "session_id required"}),
+                                     status_code=400, mimetype="application/json",
+                                     headers=cors_headers(req))
+
+        stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+        session = stripe.checkout.Session.retrieve(session_id)
+
+        # Security: only the user who created the session may confirm it
+        if session.client_reference_id != uid:
+            logging.warning(f"[verify-payment] uid mismatch: token={uid}, session={session.client_reference_id}")
+            return func.HttpResponse(json.dumps({"error": "Session does not belong to this user"}),
+                                     status_code=403, mimetype="application/json",
+                                     headers=cors_headers(req))
+
+        # Session must be paid/complete
+        if session.payment_status not in ("paid",) and session.status not in ("complete",):
+            logging.info(f"[verify-payment] session {session_id} not yet paid: payment_status={session.payment_status}")
+            return func.HttpResponse(json.dumps({"status": "pending"}),
+                                     status_code=200, mimetype="application/json",
+                                     headers=cors_headers(req))
+
+        metadata = session.metadata or {}
+        plano    = int(metadata.get("plano") or 0)
+        cus_id   = session.customer
+        sub_id   = session.subscription
+
+        if not plano:
+            logging.error(f"[verify-payment] no plano in session metadata: {metadata}")
+            return func.HttpResponse(json.dumps({"error": "Plan not found in session"}),
+                                     status_code=400, mimetype="application/json",
+                                     headers=cors_headers(req))
+
+        users_container = get_users_container()
+        renovacao = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        users_container.upsert_item({
+            "id":                     uid,
+            "aluno_id":               uid,
+            "plano":                  plano,
+            "status":                 "ativo",
+            "palavras_disponiveis":   plano,
+            "renovacao":              renovacao,
+            "stripe_customer_id":     cus_id,
+            "stripe_subscription_id": sub_id,
+        })
+        logging.info(f"[verify-payment] subscription activated for {uid}, plano={plano}, session={session_id}")
+
+        return func.HttpResponse(
+            json.dumps({"status": "ativo", "plano": plano}),
+            status_code=200, mimetype="application/json", headers=cors_headers(req)
+        )
+
+    except stripe.error.InvalidRequestError as e:
+        logging.error(f"[verify-payment] invalid Stripe request: {e}")
+        return func.HttpResponse(json.dumps({"error": str(e)}),
+                                 status_code=400, mimetype="application/json",
+                                 headers=cors_headers(req))
+    except Exception as e:
+        logging.error(f"[verify-payment] error: {e}")
+        return func.HttpResponse(json.dumps({"error": str(e)}),
+                                 status_code=500, mimetype="application/json",
+                                 headers=cors_headers(req))
+
+
 @app.route(route="version-check", methods=["GET"])
 def version_check(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse(
-        json.dumps({"version": "getattr-fix-2026-06-18", "deployed": True}),
+        json.dumps({"version": "verify-payment-2026-06-27", "deployed": True}),
         status_code=200, mimetype="application/json"
     )

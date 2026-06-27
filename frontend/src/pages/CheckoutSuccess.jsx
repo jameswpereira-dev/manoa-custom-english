@@ -1,39 +1,61 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getSubscription } from '../services/api';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { verifyPayment, getSubscription } from '../services/api';
 import { useSubscription } from '../contexts/SubscriptionContext';
 
 const NAVY = '#1E3A6A';
 
 export default function CheckoutSuccess() {
   const nav                   = useNavigate();
+  const [searchParams]        = useSearchParams();
   const { refetch }           = useSubscription();
   const [active, setActive]   = useState(false);
   const [gaveUp, setGaveUp]   = useState(false);
 
   useEffect(() => {
-    let tries = 0;
-    const MAX  = 15; // poll up to 30s (every 2s)
+    const sessionId = searchParams.get('session_id');
+    let cancelled = false;
 
-    const id = setInterval(async () => {
-      tries++;
-      try {
-        const data = await getSubscription();
-        if (data?.status === 'ativo') {
-          setActive(true);
-          clearInterval(id);
-          refetch(); // sync context so Dashboard sees status=ativo immediately
-          return;
-        }
-      } catch { /* keep polling */ }
-      if (tries >= MAX) {
-        clearInterval(id);
-        setGaveUp(true);
+    async function activate() {
+      // Primary path: use session_id to confirm payment directly with Stripe API.
+      // This works even when the Stripe webhook has delivery issues.
+      if (sessionId) {
+        try {
+          const data = await verifyPayment(sessionId);
+          if (!cancelled && data?.status === 'ativo') {
+            refetch();
+            setActive(true);
+            return;
+          }
+        } catch { /* fall through to polling */ }
       }
-    }, 2000);
 
-    return () => clearInterval(id);
-  // refetch is stable (useCallback keyed on user) — safe to omit from deps
+      // Fallback: poll get-subscription (catches webhook-activated subscriptions)
+      let tries = 0;
+      const MAX = 15; // 30s at 2s interval
+
+      const id = setInterval(async () => {
+        tries++;
+        try {
+          const data = await getSubscription();
+          if (!cancelled && data?.status === 'ativo') {
+            clearInterval(id);
+            refetch();
+            setActive(true);
+            return;
+          }
+        } catch { /* keep polling */ }
+        if (tries >= MAX) {
+          clearInterval(id);
+          if (!cancelled) setGaveUp(true);
+        }
+      }, 2000);
+
+      return () => clearInterval(id);
+    }
+
+    activate();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

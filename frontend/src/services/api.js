@@ -64,3 +64,9 @@ export async function createCheckoutSession(plan) {
   const { data } = await axios.post(`${BASE}/api/create-checkout-session`, { plan }, { headers });
   return data;
 }
+
+export async function verifyPayment(sessionId) {
+  const headers = await authHeaders();
+  const { data } = await axios.post(`${BASE}/api/verify-payment`, { session_id: sessionId }, { headers });
+  return data;
+}
