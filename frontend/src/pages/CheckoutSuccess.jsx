@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSubscription } from '../services/api';
+import { useSubscription } from '../contexts/SubscriptionContext';
 
 const NAVY = '#1E3A6A';
 
 export default function CheckoutSuccess() {
-  const nav               = useNavigate();
+  const nav                   = useNavigate();
+  const { refetch }           = useSubscription();
   const [active, setActive]   = useState(false);
   const [gaveUp, setGaveUp]   = useState(false);
 
@@ -20,6 +22,7 @@ export default function CheckoutSuccess() {
         if (data?.status === 'ativo') {
           setActive(true);
           clearInterval(id);
+          refetch(); // sync context so Dashboard sees status=ativo immediately
           return;
         }
       } catch { /* keep polling */ }
@@ -30,6 +33,8 @@ export default function CheckoutSuccess() {
     }, 2000);
 
     return () => clearInterval(id);
+  // refetch is stable (useCallback keyed on user) — safe to omit from deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -56,7 +61,7 @@ export default function CheckoutSuccess() {
 
         {active ? (
           <button
-            onClick={() => nav('/dashboard')}
+            onClick={async () => { await refetch(); nav('/dashboard'); }}
             style={{
               background: NAVY, color: '#fff', border: 'none',
               padding: '14px 36px', borderRadius: 10,
@@ -75,7 +80,7 @@ export default function CheckoutSuccess() {
               o plano estará ativo em alguns minutos.
             </p>
             <button
-              onClick={() => nav('/dashboard')}
+              onClick={async () => { await refetch(); nav('/dashboard'); }}
               style={{
                 background: NAVY, color: '#fff', border: 'none',
                 padding: '14px 36px', borderRadius: 10,
