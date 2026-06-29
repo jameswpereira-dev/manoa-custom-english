@@ -66,15 +66,25 @@ function buildExerciseSets(selectedWords, allWords) {
 
     const listening = makeListeningExercise(word, allWords);
 
-    // Cap at 7 exercises per word (6 existing + 1 listening)
-    const exercises = [...existing, listening].slice(0, 7).map(ex => ({ ...ex, _word: word }));
+    // Merge and cap at 7 (6 backend exercises + 1 listening)
+    const all = [...existing, listening].slice(0, 7);
+
+    // Fixed ordering rule:
+    //   pos 1 — pronunciation_intro (prepended below for new words)
+    //   pos 2 — fill_in_the_blank (always first among scorable exercises)
+    //   pos 3+ — all other types, reshuffled every session
+    const fillBlank     = all.filter(e => e.type === 'fill_in_the_blank');
+    const rest          = all.filter(e => e.type !== 'fill_in_the_blank');
+    const shuffledRest  = rest.sort(() => Math.random() - 0.5);
+    // Fallback: if fill_in_the_blank is absent, shuffledRest becomes positions 2+
+    const ordered = [...fillBlank, ...shuffledRest].map(ex => ({ ...ex, _word: word }));
 
     // For new words (no prior attempts), prepend a pronunciation intro step
     if ((word.progresso?.tentativas ?? 0) === 0 && word.audio_url) {
-      return [makePronunciationIntro(word), ...exercises];
+      return [makePronunciationIntro(word), ...ordered];
     }
 
-    return exercises;
+    return ordered;
   });
 }
 
