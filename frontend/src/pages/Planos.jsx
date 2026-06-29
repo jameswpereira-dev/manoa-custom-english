@@ -2,15 +2,18 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import logoManoa from '../logo-manoa.png';
+import { PLAN_CATALOG } from '../config/plans';
 
 const NAVY = '#1E3A6A';
 const RED  = '#B22234';
 
-const PLANS = [
-  { id: 20, label: 'Plano 20', price: 'R$ 29,90', words: '20 palavras/mês', popular: false },
-  { id: 30, label: 'Plano 30', price: 'R$ 39,90', words: '30 palavras/mês', popular: true  },
-  { id: 40, label: 'Plano 40', price: 'R$ 49,90', words: '40 palavras/mês', popular: false },
-];
+const PLANS = PLAN_CATALOG.map(p => ({
+  id:      p.tier,
+  label:   p.tier,
+  price:   p.price,
+  words:   `${p.limit} palavras/mês`,
+  popular: p.popular,
+}));
 
 const FEATURES = [
   'Geração automática de vocabulário',

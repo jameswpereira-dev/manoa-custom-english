@@ -12,7 +12,8 @@ export default function Checkout() {
 
   const startCheckout = () => {
     setError('');
-    createCheckoutSession(parseInt(plan, 10))
+    // plan is a tier name string (Starter/Professional/Expert)
+    createCheckoutSession(plan)
       .then(data => {
         if (data?.url) {
           window.location.href = data.url;

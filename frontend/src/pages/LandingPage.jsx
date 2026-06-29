@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Briefcase, Sparkles, Headphones } from 'lucide-react';
 import logoManoa from '../logo-manoa.png';
+import { PLAN_CATALOG } from '../config/plans';
 
 function useReveal(delay = 0) {
   const ref = useRef(null);
@@ -77,11 +78,13 @@ const TESTIMONIALS = [
   { name:'Camila F.',  role:'Médica Intensivista · BH',  init:'CF', text:'"O inglês médico é muito específico. A MANOA entende isso e gera palavras com contexto clínico real. Uso todo dia na leitura de artigos."' },
 ];
 
-const PLANS = [
-  { id:20, name:'Starter',      price:'R$ 29,90', words:'20 palavras/mês', popular:false },
-  { id:30, name:'Professional', price:'R$ 39,90', words:'30 palavras/mês', popular:true  },
-  { id:40, name:'Expert',       price:'R$ 49,90', words:'40 palavras/mês', popular:false },
-];
+const PLANS = PLAN_CATALOG.map(p => ({
+  id:      p.tier,
+  name:    p.tier,
+  price:   p.price,
+  words:   `${p.limit} palavras/mês`,
+  popular: p.popular,
+}));
 
 const FEATURES = [
   'Vocabulário da sua área',

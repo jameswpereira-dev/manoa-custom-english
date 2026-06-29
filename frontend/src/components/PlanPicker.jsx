@@ -1,12 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Btn from './Btn';
+import { PLAN_CATALOG } from '../config/plans';
 
-const PLANS = [
-  { id:20, name:'Starter',      price:'R$ 29,90', words:'20 palavras/mês', popular:false },
-  { id:30, name:'Professional', price:'R$ 39,90', words:'30 palavras/mês', popular:true  },
-  { id:40, name:'Expert',       price:'R$ 49,90', words:'40 palavras/mês', popular:false },
-];
+const PLANS = PLAN_CATALOG.map(p => ({
+  id:      p.tier,
+  name:    p.tier,
+  price:   p.price,
+  words:   `${p.limit} palavras/mês`,
+  popular: p.popular,
+}));
 
 const FEATURES = [
   'Vocabulário da sua área',

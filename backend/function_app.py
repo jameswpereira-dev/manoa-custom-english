@@ -274,6 +274,7 @@ def process_content(req: func.HttpRequest) -> func.HttpResponse:
                     status_code=402, mimetype="application/json", headers=cors_headers(req)
                 )
             palavras_disponiveis = user_doc.get("palavras_disponiveis", 0)
+            limite_palavras      = resolve_limit(user_doc)  # handles old int and new string plan formats
             if palavras_disponiveis <= 0:
                 return func.HttpResponse(
                     json.dumps({"error": "Você atingiu o limite do seu plano. Faça upgrade para continuar.", "code": "LIMIT_REACHED"}),
@@ -302,8 +303,8 @@ def process_content(req: func.HttpRequest) -> func.HttpResponse:
                                      status_code=400, mimetype="application/json",
                                      headers=cors_headers(req))
 
-        # Cap to available words
-        words = words[:min(len(words), palavras_disponiveis, 30)]
+        # Cap to available words (palavras_disponiveis tracks remaining; limite_palavras is the plan ceiling)
+        words = words[:min(len(words), palavras_disponiveis, limite_palavras)]
 
         container = get_cosmos_container()
         saved = []
@@ -569,11 +570,39 @@ Return ONLY the JSON object, no other text."""
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://manoacustomenglish.com")
 
-PLAN_PRICE_IDS = lambda: {
-    "20": os.environ.get("STRIPE_PRICE_ID_20", ""),
-    "30": os.environ.get("STRIPE_PRICE_ID_30", ""),
-    "40": os.environ.get("STRIPE_PRICE_ID_40", ""),
+# ── Plan catalog — single source of truth ────────────────────────────────────
+# tier → {limit (words), price_brl, env_key for Stripe Price ID}
+# Env vars STRIPE_PRICE_ID_20/30/40 kept for backward compat;
+# STRIPE_PRICE_ID_STARTER/PROFESSIONAL/EXPERT take precedence if set.
+PLAN_CATALOG = {
+    "Starter":      {"limit": 10, "price_brl": "29.90", "env_key": "STRIPE_PRICE_ID_STARTER",      "env_fallback": "STRIPE_PRICE_ID_20"},
+    "Professional": {"limit": 15, "price_brl": "39.90", "env_key": "STRIPE_PRICE_ID_PROFESSIONAL",  "env_fallback": "STRIPE_PRICE_ID_30"},
+    "Expert":       {"limit": 20, "price_brl": "49.90", "env_key": "STRIPE_PRICE_ID_EXPERT",        "env_fallback": "STRIPE_PRICE_ID_40"},
 }
+
+# Map old int-plan values (stored before this migration) → new tier names
+_OLD_PLAN_TO_TIER = {20: "Starter", 30: "Professional", 40: "Expert",
+                     "20": "Starter", "30": "Professional", "40": "Expert"}
+
+def get_plan_price_id(tier: str) -> str:
+    p = PLAN_CATALOG.get(tier, {})
+    return os.environ.get(p.get("env_key", ""), "") or os.environ.get(p.get("env_fallback", ""), "")
+
+def get_plan_limit(tier: str) -> int:
+    return PLAN_CATALOG.get(tier, {}).get("limit", 0)
+
+def resolve_tier(raw) -> str:
+    """Convert old int/string plan values (20/30/40) to tier names."""
+    if raw in PLAN_CATALOG:
+        return raw  # already a valid tier name
+    return _OLD_PLAN_TO_TIER.get(raw, "")
+
+def resolve_limit(doc: dict) -> int:
+    """Get word limit from a user doc, handling both old and new formats."""
+    if doc.get("limite_palavras"):
+        return int(doc["limite_palavras"])
+    tier = resolve_tier(doc.get("plano", ""))
+    return get_plan_limit(tier) or 10  # default to Starter
 
 
 @app.route(route="get-subscription", methods=["GET", "OPTIONS"])
@@ -590,13 +619,18 @@ def get_subscription(req: func.HttpRequest) -> func.HttpResponse:
         users_container = get_users_container()
         try:
             doc = users_container.read_item(item=uid, partition_key=uid)
+            # Resolve tier and limit (handles both old int and new string plano values)
+            raw_plano = doc.get("plano")
+            tier      = resolve_tier(raw_plano) if not isinstance(raw_plano, str) or raw_plano not in PLAN_CATALOG else raw_plano
+            limit     = resolve_limit(doc)
             return func.HttpResponse(
                 json.dumps({
-                    "plano":               doc.get("plano"),
-                    "status":              doc.get("status"),
+                    "plano":                tier or raw_plano,
+                    "limite_palavras":      limit,
+                    "status":               doc.get("status"),
                     "palavras_disponiveis": doc.get("palavras_disponiveis", 0),
-                    "renovacao":           doc.get("renovacao"),
-                    "stripe_customer_id":  doc.get("stripe_customer_id"),
+                    "renovacao":            doc.get("renovacao"),
+                    "stripe_customer_id":   doc.get("stripe_customer_id"),
                 }),
                 status_code=200, mimetype="application/json", headers=cors_headers(req)
             )
@@ -624,13 +658,19 @@ def create_checkout_session(req: func.HttpRequest) -> func.HttpResponse:
                                  mimetype="application/json", headers=cors_headers(req))
 
     try:
-        body  = req.get_json()
-        plan  = str(body.get("plan", ""))
-        price_id = PLAN_PRICE_IDS().get(plan)
+        body = req.get_json()
+        raw_plan = body.get("plan", "")
 
-        if not price_id:
+        # Accept both new tier names ("Starter") and old int format (20/30/40)
+        tier = resolve_tier(raw_plan) if raw_plan not in PLAN_CATALOG else str(raw_plan)
+        if not tier:
+            tier = str(raw_plan)  # pass through if unknown — will fail at price_id lookup
+        price_id = get_plan_price_id(tier)
+        limit    = get_plan_limit(tier)
+
+        if not price_id or not limit:
             return func.HttpResponse(
-                json.dumps({"error": f"Plano '{plan}' inválido ou preço não configurado."}),
+                json.dumps({"error": f"Plano '{raw_plan}' inválido ou preço não configurado."}),
                 status_code=400, mimetype="application/json", headers=cors_headers(req)
             )
 
@@ -638,18 +678,14 @@ def create_checkout_session(req: func.HttpRequest) -> func.HttpResponse:
 
         session = stripe.checkout.Session.create(
             payment_method_types=["card", "boleto"],
-            payment_method_options={
-                "boleto": {
-                    "expires_after_days": 3,
-                },
-            },
+            payment_method_options={"boleto": {"expires_after_days": 3}},
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
             success_url=f"{FRONTEND_URL}/sucesso?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{FRONTEND_URL}/?planos=1",
             client_reference_id=uid,
-            metadata={"uid": uid, "plano": plan},
-            subscription_data={"metadata": {"uid": uid, "plano": plan}},
+            metadata={"uid": uid, "tier": tier, "limite_palavras": str(limit)},
+            subscription_data={"metadata": {"uid": uid, "tier": tier, "limite_palavras": str(limit)}},
         )
 
         return func.HttpResponse(
@@ -691,27 +727,31 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
             # stripe v15: metadata is a StripeObject without .get(); use .to_dict()
             _meta    = getattr(session, "metadata", None)
             metadata = _meta.to_dict() if _meta else {}
-            plano    = int(metadata.get("plano") or 0)
+            # Support both new format (tier) and old format (plano=20/30/40)
+            raw      = metadata.get("tier") or metadata.get("plano")
+            tier     = resolve_tier(raw) if raw not in PLAN_CATALOG else raw
+            limit    = get_plan_limit(tier) if tier else int(metadata.get("limite_palavras") or 0)
             cus_id   = getattr(session, "customer", None)
             sub_id   = getattr(session, "subscription", None)
 
-            if uid and plano:
+            if uid and tier and limit:
                 renovacao = (datetime.utcnow() + timedelta(days=30)).isoformat()
                 users_container.upsert_item({
-                    "id":                   uid,
-                    "aluno_id":             uid,
-                    "plano":                plano,
-                    "status":               "ativo",
-                    "palavras_disponiveis": plano,
-                    "renovacao":            renovacao,
-                    "stripe_customer_id":   cus_id,
+                    "id":                     uid,
+                    "aluno_id":               uid,
+                    "plano":                  tier,
+                    "limite_palavras":        limit,
+                    "status":                 "ativo",
+                    "palavras_disponiveis":   limit,
+                    "renovacao":              renovacao,
+                    "stripe_customer_id":     cus_id,
                     "stripe_subscription_id": sub_id,
                 })
-                logging.info(f"[stripe-webhook] subscription created for {uid}, plano={plano}")
+                logging.info(f"[stripe-webhook] subscription created for {uid}, tier={tier}, limit={limit}")
 
         elif event["type"] == "invoice.payment_succeeded":
-            invoice    = event["data"]["object"]
-            cus_id     = getattr(invoice, "customer", None)
+            invoice        = event["data"]["object"]
+            cus_id         = getattr(invoice, "customer", None)
             billing_reason = getattr(invoice, "billing_reason", "") or ""
 
             if billing_reason == "subscription_cycle":
@@ -721,14 +761,15 @@ def stripe_webhook(req: func.HttpRequest) -> func.HttpResponse:
                     enable_cross_partition_query=True,
                 ))
                 if items:
-                    doc = items[0]
-                    plano = doc.get("plano", 20)
+                    doc   = items[0]
+                    limit = resolve_limit(doc)  # handles old int and new string formats
                     renovacao = (datetime.utcnow() + timedelta(days=30)).isoformat()
-                    doc["palavras_disponiveis"] = plano
-                    doc["status"]   = "ativo"
-                    doc["renovacao"] = renovacao
+                    doc["palavras_disponiveis"] = limit
+                    doc["limite_palavras"]      = limit
+                    doc["status"]               = "ativo"
+                    doc["renovacao"]            = renovacao
                     users_container.upsert_item(doc)
-                    logging.info(f"[stripe-webhook] renewal for customer {cus_id}, plano={plano}")
+                    logging.info(f"[stripe-webhook] renewal for customer {cus_id}, limit={limit}")
 
         elif event["type"] == "customer.subscription.deleted":
             subscription = event["data"]["object"]
@@ -795,12 +836,15 @@ def verify_payment(req: func.HttpRequest) -> func.HttpResponse:
 
         # stripe v15: Session.metadata is a StripeObject (no .get()); use .to_dict()
         metadata = session.metadata.to_dict() if session.metadata else {}
-        plano    = int(metadata.get("plano") or 0)
-        cus_id   = session.customer
-        sub_id   = session.subscription
+        # Support both new format (tier) and old format (plano=20/30/40)
+        raw   = metadata.get("tier") or metadata.get("plano")
+        tier  = resolve_tier(raw) if raw not in PLAN_CATALOG else raw
+        limit = get_plan_limit(tier) if tier else int(metadata.get("limite_palavras") or 0)
+        cus_id = session.customer
+        sub_id = session.subscription
 
-        if not plano:
-            logging.error(f"[verify-payment] no plano in session metadata: {metadata}")
+        if not tier or not limit:
+            logging.error(f"[verify-payment] no valid plan in session metadata: {metadata}")
             return func.HttpResponse(json.dumps({"error": "Plan not found in session"}),
                                      status_code=400, mimetype="application/json",
                                      headers=cors_headers(req))
@@ -810,17 +854,18 @@ def verify_payment(req: func.HttpRequest) -> func.HttpResponse:
         users_container.upsert_item({
             "id":                     uid,
             "aluno_id":               uid,
-            "plano":                  plano,
+            "plano":                  tier,
+            "limite_palavras":        limit,
             "status":                 "ativo",
-            "palavras_disponiveis":   plano,
+            "palavras_disponiveis":   limit,
             "renovacao":              renovacao,
             "stripe_customer_id":     cus_id,
             "stripe_subscription_id": sub_id,
         })
-        logging.info(f"[verify-payment] subscription activated for {uid}, plano={plano}, session={session_id}")
+        logging.info(f"[verify-payment] subscription activated for {uid}, tier={tier}, limit={limit}, session={session_id}")
 
         return func.HttpResponse(
-            json.dumps({"status": "ativo", "plano": plano}),
+            json.dumps({"status": "ativo", "plano": tier, "limite_palavras": limit}),
             status_code=200, mimetype="application/json", headers=cors_headers(req)
         )
 
@@ -839,6 +884,6 @@ def verify_payment(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="version-check", methods=["GET"])
 def version_check(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse(
-        json.dumps({"version": "stripe-v15-metadata-fix-2026-06-27", "deployed": True}),
+        json.dumps({"version": "plan-catalog-restructure-2026-06-28", "deployed": True}),
         status_code=200, mimetype="application/json"
     )

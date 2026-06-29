@@ -230,7 +230,9 @@ function Empty({ onAdd }) {
 
 function SubscriptionBar({ sub }) {
   const disp  = sub.palavras_disponiveis ?? 0;
-  const total = sub.plano ?? 20;
+  // Use limite_palavras (new format) with fallback to plano if it's a number (old format)
+  const total = sub.limite_palavras ?? (typeof sub.plano === 'number' ? sub.plano : 10);
+  const tier  = typeof sub.plano === 'string' ? sub.plano : null;
   const used  = total - disp;
   const pct   = Math.min(100, Math.round((used / total) * 100));
   const color = disp === 0 ? '#ef4444' : disp <= total * 0.25 ? '#f59e0b' : '#22c55e';
@@ -245,7 +247,7 @@ function SubscriptionBar({ sub }) {
       <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
           <span style={{ fontSize: '.82rem', fontWeight: 600, color: '#475569' }}>
-            Plano {total} — palavras restantes este mês
+            {tier ? `Plano ${tier}` : 'Plano'} — palavras restantes este mês
           </span>
           <span style={{ fontSize: '.82rem', fontWeight: 700, color }}>
             {disp}/{total}
