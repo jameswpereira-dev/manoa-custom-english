@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import Btn from './Btn';
 import { PLAN_CATALOG } from '../config/plans';
 
-const NAVY  = '#1E3A6A';
 const GREEN = '#16a34a';
 
 const PLANS = PLAN_CATALOG.map(p => ({
