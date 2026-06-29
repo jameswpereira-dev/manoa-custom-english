@@ -150,7 +150,7 @@ export default function MultiExercises() {
   const [evaluations, setEvaluations] = useState({});
   const [evaluating,  setEvaluating]  = useState(false);
   const audioRef = useRef(null);
-  const { playSuccess, playFailure, muted, toggleMute } = useSoundEffects();
+  const { playSuccess, playFailure, muted, toggleMute, warmup } = useSoundEffects();
 
   useEffect(() => {
     if (!wordIds.length) { nav('/dashboard'); return; }
@@ -198,6 +198,10 @@ export default function MultiExercises() {
   const check = async () => {
     const ans = answers[step];
     if (!ans) return;
+
+    // Unlock AudioContext synchronously within the user gesture, before any awaits.
+    // Once unlocked here, it stays running — safe to play even after async gaps.
+    warmup();
 
     if (ex.type === 'scenario_production') {
       setEvaluating(true);
