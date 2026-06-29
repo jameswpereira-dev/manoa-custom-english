@@ -73,7 +73,7 @@ export default function Planos() {
 
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
             gap: 28, alignItems: 'start',
           }}>
             {PLANS.map(p => (
@@ -143,6 +143,63 @@ export default function Planos() {
                 </button>
               </div>
             ))}
+
+            {/* Pix one-time card */}
+            <div style={{
+              background: '#fff', color: '#1e293b',
+              borderRadius: 18, padding: '40px 28px 32px',
+              boxShadow: '0 2px 14px rgba(0,0,0,.07)',
+              border: '2px dashed #86efac',
+              position: 'relative', textAlign: 'center',
+            }}>
+              <div style={{
+                position: 'absolute', top: -15, left: '50%',
+                transform: 'translateX(-50%)',
+                background: '#16a34a', color: '#fff',
+                fontSize: '.73rem', fontWeight: 700,
+                padding: '4px 18px', borderRadius: 20, whiteSpace: 'nowrap',
+              }}>
+                Pague uma vez
+              </div>
+              <h3 style={{ fontSize: '.95rem', fontWeight: 700, marginBottom: 6, color: '#64748b' }}>
+                Pacote Avulso Pix
+              </h3>
+              <div style={{ fontSize: 'clamp(2rem, 5vw, 2.6rem)', fontWeight: 800, marginBottom: 2 }}>
+                R$ 39,90
+              </div>
+              <div style={{ fontSize: '.84rem', opacity: .7, marginBottom: 20 }}>pagamento único · sem renovação</div>
+              <div style={{
+                background: '#f0fdf4', borderRadius: 9, padding: '10px 16px',
+                fontSize: '.92rem', fontWeight: 600, marginBottom: 28, color: '#166534',
+              }}>
+                10 palavras · 30 dias de acesso
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', textAlign: 'left' }}>
+                {FEATURES.map(feat => (
+                  <li key={feat} style={{ fontSize: '.87rem', marginBottom: 9, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <span style={{ color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>✓</span>
+                    <span>{feat}</span>
+                  </li>
+                ))}
+                <li style={{ fontSize: '.87rem', marginBottom: 9, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <span style={{ color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>○</span>
+                  <span style={{ color: '#94a3b8' }}>Sem renovação automática</span>
+                </li>
+              </ul>
+              <button
+                onClick={() => nav(user ? '/pix-payment' : '/cadastro')}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: 9,
+                  fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+                  background: '#16a34a', color: '#fff', border: 'none',
+                  transition: 'filter .15s, transform .1s',
+                }}
+                onMouseOver={e => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseOut={e => { e.currentTarget.style.filter = ''; e.currentTarget.style.transform = ''; }}
+              >
+                Pagar com Pix
+              </button>
+            </div>
           </div>
         </div>
       </section>

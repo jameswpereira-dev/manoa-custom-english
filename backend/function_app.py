@@ -1,5 +1,5 @@
 import azure.functions as func
-import json, os, base64, io, re, uuid, logging
+import json, os, base64, io, re, uuid, logging, hmac, hashlib
 from datetime import datetime, timedelta
 import requests
 import anthropic
@@ -49,7 +49,6 @@ def verify_firebase_token(req: func.HttpRequest):
         raise ValueError("Missing Authorization header")
     id_token = auth_header[7:]
 
-    project_id = os.environ.get("FIREBASE_PROJECT_ID", "")
     url = (
         f"https://identitytoolkit.googleapis.com/v1/accounts:lookup"
         f"?key={os.environ.get('FIREBASE_WEB_API_KEY','')}"
@@ -61,6 +60,26 @@ def verify_firebase_token(req: func.HttpRequest):
     if not users:
         raise ValueError("User not found")
     return users[0]["localId"]
+
+
+def _firebase_uid_and_email(req: func.HttpRequest):
+    """Returns (uid, email). Raises ValueError on auth failure."""
+    auth_header = req.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise ValueError("Missing Authorization header")
+    id_token = auth_header[7:]
+    url = (
+        f"https://identitytoolkit.googleapis.com/v1/accounts:lookup"
+        f"?key={os.environ.get('FIREBASE_WEB_API_KEY','')}"
+    )
+    resp = requests.post(url, json={"idToken": id_token}, timeout=10)
+    if resp.status_code != 200:
+        raise ValueError("Invalid Firebase token")
+    users = resp.json().get("users", [])
+    if not users:
+        raise ValueError("User not found")
+    u = users[0]
+    return u["localId"], u.get("email", "")
 
 
 ALLOWED_ORIGINS = {
@@ -619,6 +638,20 @@ def get_subscription(req: func.HttpRequest) -> func.HttpResponse:
         users_container = get_users_container()
         try:
             doc = users_container.read_item(item=uid, partition_key=uid)
+
+            # Check if time-limited access (Mercado Pago Pix) has expired
+            access_valid_until = doc.get("access_valid_until")
+            if access_valid_until and datetime.utcnow().isoformat() > access_valid_until:
+                return func.HttpResponse(
+                    json.dumps({
+                        "status":           "expirado",
+                        "plano":            doc.get("plano"),
+                        "limite_palavras":  doc.get("limite_palavras"),
+                        "payment_provider": doc.get("payment_provider"),
+                    }),
+                    status_code=200, mimetype="application/json", headers=cors_headers(req)
+                )
+
             # Resolve tier and limit (handles both old int and new string plano values)
             raw_plano = doc.get("plano")
             tier      = resolve_tier(raw_plano) if not isinstance(raw_plano, str) or raw_plano not in PLAN_CATALOG else raw_plano
@@ -631,6 +664,8 @@ def get_subscription(req: func.HttpRequest) -> func.HttpResponse:
                     "palavras_disponiveis": doc.get("palavras_disponiveis", 0),
                     "renovacao":            doc.get("renovacao"),
                     "stripe_customer_id":   doc.get("stripe_customer_id"),
+                    "payment_provider":     doc.get("payment_provider", "stripe"),
+                    "access_valid_until":   doc.get("access_valid_until"),
                 }),
                 status_code=200, mimetype="application/json", headers=cors_headers(req)
             )
@@ -879,6 +914,157 @@ def verify_payment(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(json.dumps({"error": str(e)}),
                                  status_code=500, mimetype="application/json",
                                  headers=cors_headers(req))
+
+
+# ── Mercado Pago Pix endpoints ────────────────────────────────────────────────
+
+_MP_API_BASE     = "https://api.mercadopago.com"
+_MP_PIX_TIER     = "Pix-10"
+_MP_PIX_LIMIT    = 10
+_MP_PIX_PRICE    = 39.90
+_BACKEND_URL     = os.environ.get("BACKEND_URL", "https://func-manoa-custom-english-staging.azurewebsites.net")
+
+
+@app.route(route="create-pix-mercadopago-payment", methods=["POST", "OPTIONS"])
+def create_pix_mercadopago_payment(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return options_response(req)
+
+    try:
+        uid, email = _firebase_uid_and_email(req)
+    except ValueError as e:
+        return func.HttpResponse(json.dumps({"error": str(e)}), status_code=401,
+                                 mimetype="application/json", headers=cors_headers(req))
+
+    mp_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
+    if not mp_token:
+        return func.HttpResponse(json.dumps({"error": "Mercado Pago não configurado"}),
+                                 status_code=503, mimetype="application/json", headers=cors_headers(req))
+
+    try:
+        expiration = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000+00:00")
+        payload = {
+            "transaction_amount": _MP_PIX_PRICE,
+            "description":        "MANOA Custom English — Pacote 10 palavras / 30 dias",
+            "payment_method_id":  "pix",
+            "payer":              {"email": email or f"user_{uid[:8]}@manoa.app"},
+            "external_reference": uid,
+            "notification_url":   f"{_BACKEND_URL}/api/mercadopago-webhook",
+            "date_of_expiration": expiration,
+        }
+        resp = requests.post(
+            f"{_MP_API_BASE}/v1/payments",
+            json=payload,
+            headers={
+                "Authorization":    f"Bearer {mp_token}",
+                "Content-Type":     "application/json",
+                "X-Idempotency-Key": str(uuid.uuid4()),
+            },
+            timeout=15,
+        )
+        if not resp.ok:
+            logging.error(f"[create-pix] MP API error {resp.status_code}: {resp.text[:400]}")
+            err_msg = (resp.json().get("message") or str(resp.status_code)) if resp.content else str(resp.status_code)
+            return func.HttpResponse(json.dumps({"error": f"Erro ao criar pagamento Pix: {err_msg}"}),
+                                     status_code=502, mimetype="application/json", headers=cors_headers(req))
+
+        payment = resp.json()
+        tx_data  = (payment.get("point_of_interaction") or {}).get("transaction_data") or {}
+        return func.HttpResponse(
+            json.dumps({
+                "payment_id":     payment.get("id"),
+                "status":         payment.get("status"),
+                "qr_code":        tx_data.get("qr_code"),
+                "qr_code_base64": tx_data.get("qr_code_base64"),
+                "ticket_url":     tx_data.get("ticket_url"),
+                "expiration":     payment.get("date_of_expiration"),
+            }),
+            status_code=200, mimetype="application/json", headers=cors_headers(req)
+        )
+    except Exception as e:
+        logging.error(f"[create-pix] error: {e}")
+        return func.HttpResponse(json.dumps({"error": str(e)}),
+                                 status_code=500, mimetype="application/json", headers=cors_headers(req))
+
+
+@app.route(route="mercadopago-webhook", methods=["POST"])
+def mercadopago_webhook(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        body = req.get_json()
+    except Exception:
+        body = {}
+
+    mp_webhook_secret = os.environ.get("MERCADOPAGO_WEBHOOK_SECRET", "")
+    if mp_webhook_secret:
+        try:
+            x_sig    = req.headers.get("x-signature") or req.headers.get("X-Signature") or ""
+            x_req_id = req.headers.get("x-request-id") or req.headers.get("X-Request-Id") or ""
+            sig_parts = dict(p.split("=", 1) for p in x_sig.split(",") if "=" in p)
+            ts  = sig_parts.get("ts", "")
+            v1  = sig_parts.get("v1", "")
+            data_id  = str((body.get("data") or {}).get("id", ""))
+            manifest = f"id={data_id};request-id={x_req_id};ts={ts}"
+            expected = hmac.new(
+                mp_webhook_secret.encode("utf-8"),
+                manifest.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            if expected != v1:
+                logging.warning("[mp-webhook] signature mismatch — rejecting")
+                return func.HttpResponse(json.dumps({"error": "Invalid signature"}),
+                                         status_code=400, mimetype="application/json")
+        except Exception as e:
+            logging.error(f"[mp-webhook] signature validation error: {e}")
+            return func.HttpResponse(json.dumps({"error": "Signature error"}),
+                                     status_code=400, mimetype="application/json")
+    else:
+        logging.warning("[mp-webhook] MERCADOPAGO_WEBHOOK_SECRET not set — skipping signature validation")
+
+    try:
+        notif_type = body.get("type", "")
+        data_id    = str((body.get("data") or {}).get("id", ""))
+
+        if notif_type != "payment" or not data_id:
+            logging.info(f"[mp-webhook] ignoring: type={notif_type!r} id={data_id!r}")
+            return func.HttpResponse(json.dumps({"ok": True}), status_code=200, mimetype="application/json")
+
+        mp_token     = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
+        pay_resp     = requests.get(
+            f"{_MP_API_BASE}/v1/payments/{data_id}",
+            headers={"Authorization": f"Bearer {mp_token}"},
+            timeout=10,
+        )
+        if not pay_resp.ok:
+            logging.error(f"[mp-webhook] failed to fetch payment {data_id}: {pay_resp.status_code}")
+            return func.HttpResponse(json.dumps({"ok": False}), status_code=200, mimetype="application/json")
+
+        payment = pay_resp.json()
+        status  = payment.get("status", "")
+        uid     = payment.get("external_reference", "")
+        logging.info(f"[mp-webhook] payment {data_id}: status={status!r} uid={uid!r}")
+
+        if status == "approved" and uid:
+            users_container = get_users_container()
+            now       = datetime.utcnow()
+            renovacao = (now + timedelta(days=30)).isoformat()
+            users_container.upsert_item({
+                "id":                   uid,
+                "aluno_id":             uid,
+                "plano":                _MP_PIX_TIER,
+                "limite_palavras":      _MP_PIX_LIMIT,
+                "status":               "ativo",
+                "palavras_disponiveis": _MP_PIX_LIMIT,
+                "renovacao":            renovacao,
+                "access_valid_until":   renovacao,
+                "payment_provider":     "mercadopago",
+                "mp_payment_id":        data_id,
+            })
+            logging.info(f"[mp-webhook] Pix access activated uid={uid}, expires={renovacao}")
+
+    except Exception as e:
+        logging.error(f"[mp-webhook] error: {e}")
+
+    return func.HttpResponse(json.dumps({"ok": True}), status_code=200, mimetype="application/json")
 
 
 @app.route(route="version-check", methods=["GET"])

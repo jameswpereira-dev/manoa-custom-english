@@ -58,7 +58,8 @@ export default function Dashboard() {
     w.contexto?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const isSubscribed = subscription && subscription.status === 'ativo';
+  const isSubscribed   = subscription && subscription.status === 'ativo';
+  const isExpiredPix   = subscription?.status === 'expirado' && subscription?.payment_provider === 'mercadopago';
 
   if (subLoading) {
     return (
@@ -71,7 +72,7 @@ export default function Dashboard() {
   if (!isSubscribed) {
     return (
       <Layout>
-        <PlanPicker />
+        {isExpiredPix ? <ExpiredPixScreen /> : <PlanPicker />}
       </Layout>
     );
   }
@@ -228,6 +229,54 @@ function Empty({ onAdd }) {
   );
 }
 
+function ExpiredPixScreen() {
+  const nav = useNavigate();
+  return (
+    <div style={{ textAlign: 'center', padding: '60px 24px', maxWidth: 520, margin: '0 auto' }}>
+      <div style={{ fontSize: '3rem', marginBottom: 16 }}>⏰</div>
+      <h2 style={{ color: '#1E3A6A', fontSize: '1.4rem', fontWeight: 700, marginBottom: 10 }}>
+        Seu acesso Pix expirou
+      </h2>
+      <p style={{ color: '#64748b', marginBottom: 28, lineHeight: 1.7 }}>
+        Por R$ 39,90 você teve <strong>10 palavras por 30 dias</strong> — ótimo para começar.
+      </p>
+      <div style={{
+        background: '#f0f9ff', border: '1.5px solid #bae6fd',
+        borderRadius: 12, padding: '20px 24px', marginBottom: 32, textAlign: 'left',
+      }}>
+        <strong style={{ color: '#0369a1', fontSize: '.9rem' }}>Quer continuar aprendendo?</strong>
+        <p style={{ color: '#475569', fontSize: '.88rem', margin: '8px 0 0', lineHeight: 1.7 }}>
+          Com o plano <strong>Professional</strong> (R$ 39,90/mês) você tem{' '}
+          <strong>15 palavras</strong> renovadas automaticamente todo mês — 50% mais vocabulário,
+          sem precisar pagar de novo.
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button
+          onClick={() => nav('/pix-payment')}
+          style={{
+            background: '#fff', color: '#1E3A6A',
+            border: '1.5px solid #1E3A6A', padding: '11px 22px',
+            borderRadius: 8, fontSize: '.9rem', fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Renovar Pix (10 palavras / 30 dias)
+        </button>
+        <button
+          onClick={() => nav('/planos')}
+          style={{
+            background: '#1E3A6A', color: '#fff',
+            border: 'none', padding: '11px 22px',
+            borderRadius: 8, fontSize: '.9rem', fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Ver planos com assinatura →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SubscriptionBar({ sub }) {
   const disp  = sub.palavras_disponiveis ?? 0;
   // Use limite_palavras (new format) with fallback to plano if it's a number (old format)
@@ -247,7 +296,8 @@ function SubscriptionBar({ sub }) {
       <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
           <span style={{ fontSize: '.82rem', fontWeight: 600, color: '#475569' }}>
-            {tier ? `Plano ${tier}` : 'Plano'} — palavras restantes este mês
+            {tier ? `Plano ${tier}` : 'Plano'} —{' '}
+            {sub.payment_provider === 'mercadopago' ? 'palavras restantes (30 dias)' : 'palavras restantes este mês'}
           </span>
           <span style={{ fontSize: '.82rem', fontWeight: 700, color }}>
             {disp}/{total}

@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import Btn from './Btn';
 import { PLAN_CATALOG } from '../config/plans';
 
+const NAVY  = '#1E3A6A';
+const GREEN = '#16a34a';
+
 const PLANS = PLAN_CATALOG.map(p => ({
   id:      p.tier,
   name:    p.tier,
@@ -76,6 +79,43 @@ export default function PlanPicker() {
             </Btn>
           </div>
         ))}
+
+        {/* Pix one-time card */}
+        <div style={{
+          background: '#fff', color: '#1e293b',
+          borderRadius: 16, padding: '32px 24px',
+          boxShadow: '0 2px 10px rgba(0,0,0,.06)',
+          border: '2px dashed #86efac',
+          position: 'relative', textAlign: 'center',
+        }}>
+          <div style={{
+            position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)',
+            background: GREEN, color: '#fff', fontSize: '.7rem', fontWeight: 700,
+            padding: '4px 16px', borderRadius: 20, whiteSpace: 'nowrap',
+          }}>
+            Pague uma vez
+          </div>
+          <div style={{ fontSize: '.82rem', fontWeight: 700, marginBottom: 6, color: '#64748b' }}>
+            PACOTE AVULSO PIX
+          </div>
+          <div style={{ fontSize: '2.1rem', fontWeight: 800, marginBottom: 2 }}>R$ 39,90</div>
+          <div style={{ fontSize: '.82rem', opacity: .75, marginBottom: 18 }}>pagamento único · 30 dias</div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 26px', textAlign: 'left' }}>
+            {FEATURES.map(f => (
+              <li key={f} style={{ fontSize: '.86rem', marginBottom: 8, display: 'flex', gap: 8 }}>
+                <span style={{ color: GREEN, fontWeight: 700 }}>✓</span>
+                <span>{f}</span>
+              </li>
+            ))}
+            <li style={{ fontSize: '.86rem', marginBottom: 8, display: 'flex', gap: 8 }}>
+              <span style={{ color: '#94a3b8', fontWeight: 700 }}>○</span>
+              <span style={{ color: '#94a3b8' }}>Sem renovação automática</span>
+            </li>
+          </ul>
+          <Btn fullWidth onClick={() => nav('/pix-payment')} style={{ background: GREEN }}>
+            Pagar com Pix
+          </Btn>
+        </div>
       </div>
     </div>
   );

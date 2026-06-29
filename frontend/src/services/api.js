@@ -70,3 +70,9 @@ export async function verifyPayment(sessionId) {
   const { data } = await axios.post(`${BASE}/api/verify-payment`, { session_id: sessionId }, { headers });
   return data;
 }
+
+export async function createPixPayment() {
+  const headers = await authHeaders();
+  const { data } = await axios.post(`${BASE}/api/create-pix-mercadopago-payment`, {}, { headers });
+  return data;
+}

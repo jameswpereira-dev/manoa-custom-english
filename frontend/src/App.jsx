@@ -17,6 +17,7 @@ import Study           from './pages/Study';
 import Exercises       from './pages/Exercises';
 import MultiExercises  from './pages/MultiExercises';
 import Dictation       from './pages/Dictation';
+import PixPayment      from './pages/PixPayment';
 
 function PublicRoute({ children }) {
   const { user, loading } = useAuth();
@@ -85,6 +86,7 @@ export default function App() {
             <Route path="/checkout"         element={<PrivateRoute><Checkout /></PrivateRoute>} />
             <Route path="/checkout-success" element={<PrivateRoute><CheckoutSuccess /></PrivateRoute>} />
             <Route path="/sucesso"          element={<PrivateRoute><CheckoutSuccess /></PrivateRoute>} />
+            <Route path="/pix-payment"      element={<PrivateRoute><PixPayment /></PrivateRoute>} />
             <Route path="/dashboard"        element={<PrivateRoute><Dashboard /></PrivateRoute>} />
 
             <Route path="/upload"              element={<SubscribedRoute><Upload /></SubscribedRoute>} />

@@ -10,3 +10,11 @@ export const PLAN_CATALOG = [
 export const PLAN_BY_TIER = Object.fromEntries(
   PLAN_CATALOG.map(p => [p.tier, p])
 );
+
+// Mercado Pago one-time Pix plan — separate from Stripe subscriptions
+export const PIX_PLAN = {
+  tier:  'Pix-10',
+  limit: 10,
+  price: 'R$ 39,90',
+  days:  30,
+};
