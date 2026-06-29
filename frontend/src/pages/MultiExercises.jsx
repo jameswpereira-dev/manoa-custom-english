@@ -3,6 +3,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Btn    from '../components/Btn';
 import { getWords, updateProgress, evaluateScenario } from '../services/api';
+import { useSoundEffects } from '../hooks/useSoundEffects';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,7 @@ export default function MultiExercises() {
   const [evaluations, setEvaluations] = useState({});
   const [evaluating,  setEvaluating]  = useState(false);
   const audioRef = useRef(null);
+  const { playSuccess, playFailure, muted, toggleMute } = useSoundEffects();
 
   useEffect(() => {
     if (!wordIds.length) { nav('/dashboard'); return; }
@@ -202,13 +204,16 @@ export default function MultiExercises() {
       try {
         const result = await evaluateScenario(ex._word?.palavra, ex.question, ans);
         setEvaluations(e => ({ ...e, [step]: result }));
-        setChecked(c => ({ ...c, [step]: !!result.correto }));
-        try { await updateProgress(ex._word.id, !!result.correto); } catch {}
+        const correto = !!result.correto;
+        setChecked(c => ({ ...c, [step]: correto }));
+        if (correto) playSuccess(); else playFailure();
+        try { await updateProgress(ex._word.id, correto); } catch {}
       } catch {
         setEvaluations(e => ({ ...e, [step]: {
           correto: false, feedback: 'Não foi possível avaliar sua resposta agora. Tente novamente.', sugestao: null,
         } }));
         setChecked(c => ({ ...c, [step]: false }));
+        playFailure();
       } finally {
         setEvaluating(false);
       }
@@ -217,6 +222,7 @@ export default function MultiExercises() {
 
     const correct = checkAnswer(ex, ans);
     setChecked(c => ({ ...c, [step]: correct }));
+    if (correct) playSuccess(); else playFailure();
     try { await updateProgress(ex._word.id, correct); } catch {}
   };
 
@@ -451,7 +457,7 @@ export default function MultiExercises() {
       <div style={{ maxWidth:600, margin:'0 auto' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
           <Link to="/dashboard" style={{ color:'#94a3b8', fontSize:'1.2rem' }}>←</Link>
-          <div>
+          <div style={{ flex:1 }}>
             <h2 style={{ color:'#3C5A99', fontWeight:700 }}>
               Exercícios —{' '}
               <span style={{ fontSize:'1rem', fontWeight:500 }}>
@@ -471,6 +477,23 @@ export default function MultiExercises() {
               ))}
             </div>
           </div>
+          <button
+            onClick={toggleMute}
+            title={muted ? 'Ativar som' : 'Silenciar'}
+            style={{
+              background: 'none',
+              border: '1px solid #e2e8f0',
+              borderRadius: 8,
+              padding: '5px 9px',
+              cursor: 'pointer',
+              fontSize: '1.1rem',
+              color: muted ? '#cbd5e1' : '#3C5A99',
+              flexShrink: 0,
+              lineHeight: 1,
+            }}
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
         </div>
 
         <div style={{ background:'#fff', borderRadius:14, padding:28, boxShadow:'0 4px 20px rgba(0,0,0,.08)' }}>
