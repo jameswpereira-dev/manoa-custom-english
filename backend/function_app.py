@@ -67,7 +67,6 @@ ALLOWED_ORIGINS = {
     "https://manoacustomenglish.com",
     "https://www.manoacustomenglish.com",
     "https://purple-smoke-0a58d0f0f.7.azurestaticapps.net",
-    "https://purple-smoke-0a58d0f0f-staging.eastus2.7.azurestaticapps.net",
     "http://localhost:3000",
     "http://localhost:3001",
 }
