@@ -11,10 +11,14 @@ export const PLAN_BY_TIER = Object.fromEntries(
   PLAN_CATALOG.map(p => [p.tier, p])
 );
 
-// Mercado Pago one-time Pix plan — separate from Stripe subscriptions
-export const PIX_PLAN = {
-  tier:  'Pix-10',
-  limit: 10,
-  price: 'R$ 39,90',
-  days:  30,
-};
+// Mercado Pago avulso Pix plans — separate from Stripe subscriptions.
+// tier → { limit (words), price (display string) }
+export const PIX_AVULSO_CATALOG = [
+  { tier: 'avulso_10', limit: 10, price: 'R$ 39,90' },
+  { tier: 'avulso_15', limit: 15, price: 'R$ 49,90' },
+  { tier: 'avulso_20', limit: 20, price: 'R$ 59,90' },
+];
+
+export const PIX_AVULSO_BY_TIER = Object.fromEntries(
+  PIX_AVULSO_CATALOG.map(p => [p.tier, p])
+);

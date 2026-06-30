@@ -71,8 +71,8 @@ export async function verifyPayment(sessionId) {
   return data;
 }
 
-export async function createPixPayment() {
+export async function createPixPayment(tier = 'avulso_10') {
   const headers = await authHeaders();
-  const { data } = await axios.post(`${BASE}/api/create-pix-mercadopago-payment`, {}, { headers });
+  const { data } = await axios.post(`${BASE}/api/create-pix-mercadopago-payment`, { tier }, { headers });
   return data;
 }

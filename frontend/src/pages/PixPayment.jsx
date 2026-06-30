@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPixPayment, getSubscription } from '../services/api';
+import { PIX_AVULSO_BY_TIER } from '../config/plans';
 
 const NAVY  = '#1E3A6A';
 const GREEN = '#16a34a';
@@ -12,11 +13,15 @@ function fmt(s) {
 
 export default function PixPayment() {
   const nav = useNavigate();
-  const [phase, setPhase]     = useState('loading'); // loading|showing|paid|expired|error
-  const [pixData, setPixData] = useState(null);
-  const [copied, setCopied]   = useState(false);
+  const [searchParams] = useSearchParams();
+  const tier = searchParams.get('tier') || 'avulso_10';
+  const planInfo = PIX_AVULSO_BY_TIER[tier] || PIX_AVULSO_BY_TIER['avulso_10'];
+
+  const [phase, setPhase]       = useState('loading'); // loading|showing|paid|expired|error
+  const [pixData, setPixData]   = useState(null);
+  const [copied, setCopied]     = useState(false);
   const [timeLeft, setTimeLeft] = useState(EXPIRY_SECS);
-  const [errMsg, setErrMsg]   = useState('');
+  const [errMsg, setErrMsg]     = useState('');
   const pollRef  = useRef(null);
   const timerRef = useRef(null);
 
@@ -26,7 +31,7 @@ export default function PixPayment() {
   }, []);
 
   useEffect(() => {
-    createPixPayment()
+    createPixPayment(tier)
       .then(data => {
         setPixData(data);
         setPhase('showing');
@@ -44,11 +49,7 @@ export default function PixPayment() {
 
         timerRef.current = setInterval(() => {
           setTimeLeft(t => {
-            if (t <= 1) {
-              stopAll();
-              setPhase('expired');
-              return 0;
-            }
+            if (t <= 1) { stopAll(); setPhase('expired'); return 0; }
             return t - 1;
           });
         }, 1000);
@@ -100,7 +101,9 @@ export default function PixPayment() {
           <h2 style={{ color: GREEN, fontSize: '1.4rem', fontWeight: 700, marginBottom: 8 }}>
             Pagamento confirmado!
           </h2>
-          <p style={{ color: '#475569' }}>Seu acesso de 30 dias foi ativado. Redirecionando…</p>
+          <p style={{ color: '#475569' }}>
+            Acesso de 30 dias com {planInfo.limit} palavras ativado. Redirecionando…
+          </p>
         </div>
       </Screen>
     );
@@ -142,7 +145,7 @@ export default function PixPayment() {
           Pagar com Pix
         </h2>
         <p style={{ color: '#64748b', marginBottom: 6, fontSize: '.9rem' }}>
-          10 palavras · 30 dias de acesso · <strong>R$ 39,90</strong> (pagamento único)
+          {planInfo.limit} palavras · 30 dias de acesso · <strong>{planInfo.price}</strong> (pagamento único)
         </p>
         <div style={{
           fontSize: '.85rem', fontWeight: 700, marginBottom: 24,
@@ -157,7 +160,7 @@ export default function PixPayment() {
             alt="QR Code Pix"
             style={{
               width: 220, height: 220, borderRadius: 12,
-              border: '2px solid #e2e8f0', marginBottom: 20, display: 'block', margin: '0 auto 20px',
+              border: '2px solid #e2e8f0', display: 'block', margin: '0 auto 20px',
             }}
           />
         ) : (
@@ -210,7 +213,7 @@ export default function PixPayment() {
           1. Abra o app do seu banco<br />
           2. Escolha <strong>Pix → QR Code</strong> ou <strong>Pix Copia e Cola</strong><br />
           3. Escaneie o QR ou cole o código acima<br />
-          4. Confirme o valor de R$ 39,90<br />
+          4. Confirme o valor de {planInfo.price}<br />
           5. A confirmação aparece automaticamente nesta tela
         </div>
 

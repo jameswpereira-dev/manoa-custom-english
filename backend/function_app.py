@@ -918,11 +918,17 @@ def verify_payment(req: func.HttpRequest) -> func.HttpResponse:
 
 # ── Mercado Pago Pix endpoints ────────────────────────────────────────────────
 
-_MP_API_BASE     = "https://api.mercadopago.com"
-_MP_PIX_TIER     = "Pix-10"
-_MP_PIX_LIMIT    = 10
-_MP_PIX_PRICE    = 39.90
-_BACKEND_URL     = os.environ.get("BACKEND_URL", "https://func-manoa-custom-english-staging.azurewebsites.net")
+_MP_API_BASE  = "https://api.mercadopago.com"
+_BACKEND_URL  = os.environ.get("BACKEND_URL", "https://func-manoa-custom-english-staging.azurewebsites.net")
+
+# Avulso Pix plan catalog — single source of truth for MP one-time payments.
+# tier → {limit (words), price (BRL float), label}
+PIX_AVULSO_CATALOG = {
+    "avulso_10": {"limit": 10, "price": 39.90, "label": "Avulso 10 palavras"},
+    "avulso_15": {"limit": 15, "price": 49.90, "label": "Avulso 15 palavras"},
+    "avulso_20": {"limit": 20, "price": 59.90, "label": "Avulso 20 palavras"},
+}
+_PIX_AVULSO_DEFAULT = "avulso_10"
 
 
 @app.route(route="create-pix-mercadopago-payment", methods=["POST", "OPTIONS"])
@@ -942,13 +948,25 @@ def create_pix_mercadopago_payment(req: func.HttpRequest) -> func.HttpResponse:
                                  status_code=503, mimetype="application/json", headers=cors_headers(req))
 
     try:
+        body = req.get_json()
+    except Exception:
+        body = {}
+    tier = (body or {}).get("tier", _PIX_AVULSO_DEFAULT)
+    plan = PIX_AVULSO_CATALOG.get(tier)
+    if not plan:
+        return func.HttpResponse(
+            json.dumps({"error": f"Tier avulso inválido: '{tier}'"}),
+            status_code=400, mimetype="application/json", headers=cors_headers(req)
+        )
+
+    try:
         expiration = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S.000+00:00")
         payload = {
-            "transaction_amount": _MP_PIX_PRICE,
-            "description":        "MANOA Custom English — Pacote 10 palavras / 30 dias",
+            "transaction_amount": plan["price"],
+            "description":        f"MANOA Custom English — {plan['label']} / 30 dias",
             "payment_method_id":  "pix",
             "payer":              {"email": email or f"user_{uid[:8]}@manoa.app"},
-            "external_reference": uid,
+            "external_reference": f"{uid}:{tier}",
             "notification_url":   f"{_BACKEND_URL}/api/mercadopago-webhook",
             "date_of_expiration": expiration,
         }
@@ -956,8 +974,8 @@ def create_pix_mercadopago_payment(req: func.HttpRequest) -> func.HttpResponse:
             f"{_MP_API_BASE}/v1/payments",
             json=payload,
             headers={
-                "Authorization":    f"Bearer {mp_token}",
-                "Content-Type":     "application/json",
+                "Authorization":     f"Bearer {mp_token}",
+                "Content-Type":      "application/json",
                 "X-Idempotency-Key": str(uuid.uuid4()),
             },
             timeout=15,
@@ -978,6 +996,9 @@ def create_pix_mercadopago_payment(req: func.HttpRequest) -> func.HttpResponse:
                 "qr_code_base64": tx_data.get("qr_code_base64"),
                 "ticket_url":     tx_data.get("ticket_url"),
                 "expiration":     payment.get("date_of_expiration"),
+                "tier":           tier,
+                "limit":          plan["limit"],
+                "price":          plan["price"],
             }),
             status_code=200, mimetype="application/json", headers=cors_headers(req)
         )
@@ -1028,8 +1049,8 @@ def mercadopago_webhook(req: func.HttpRequest) -> func.HttpResponse:
             logging.info(f"[mp-webhook] ignoring: type={notif_type!r} id={data_id!r}")
             return func.HttpResponse(json.dumps({"ok": True}), status_code=200, mimetype="application/json")
 
-        mp_token     = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
-        pay_resp     = requests.get(
+        mp_token = os.environ.get("MERCADOPAGO_ACCESS_TOKEN", "")
+        pay_resp = requests.get(
             f"{_MP_API_BASE}/v1/payments/{data_id}",
             headers={"Authorization": f"Bearer {mp_token}"},
             timeout=10,
@@ -1038,10 +1059,18 @@ def mercadopago_webhook(req: func.HttpRequest) -> func.HttpResponse:
             logging.error(f"[mp-webhook] failed to fetch payment {data_id}: {pay_resp.status_code}")
             return func.HttpResponse(json.dumps({"ok": False}), status_code=200, mimetype="application/json")
 
-        payment = pay_resp.json()
-        status  = payment.get("status", "")
-        uid     = payment.get("external_reference", "")
-        logging.info(f"[mp-webhook] payment {data_id}: status={status!r} uid={uid!r}")
+        payment    = pay_resp.json()
+        status     = payment.get("status", "")
+        ext_ref    = payment.get("external_reference", "")
+
+        # external_reference format: "{uid}:{tier}" (new) or just "{uid}" (legacy)
+        if ":" in ext_ref:
+            uid, avulso_tier = ext_ref.split(":", 1)
+        else:
+            uid, avulso_tier = ext_ref, _PIX_AVULSO_DEFAULT
+
+        plan = PIX_AVULSO_CATALOG.get(avulso_tier, PIX_AVULSO_CATALOG[_PIX_AVULSO_DEFAULT])
+        logging.info(f"[mp-webhook] payment {data_id}: status={status!r} uid={uid!r} tier={avulso_tier!r}")
 
         if status == "approved" and uid:
             users_container = get_users_container()
@@ -1050,16 +1079,16 @@ def mercadopago_webhook(req: func.HttpRequest) -> func.HttpResponse:
             users_container.upsert_item({
                 "id":                   uid,
                 "aluno_id":             uid,
-                "plano":                _MP_PIX_TIER,
-                "limite_palavras":      _MP_PIX_LIMIT,
+                "plano":                avulso_tier,
+                "limite_palavras":      plan["limit"],
                 "status":               "ativo",
-                "palavras_disponiveis": _MP_PIX_LIMIT,
+                "palavras_disponiveis": plan["limit"],
                 "renovacao":            renovacao,
                 "access_valid_until":   renovacao,
                 "payment_provider":     "mercadopago",
                 "mp_payment_id":        data_id,
             })
-            logging.info(f"[mp-webhook] Pix access activated uid={uid}, expires={renovacao}")
+            logging.info(f"[mp-webhook] activated uid={uid} tier={avulso_tier} limit={plan['limit']} expires={renovacao}")
 
     except Exception as e:
         logging.error(f"[mp-webhook] error: {e}")

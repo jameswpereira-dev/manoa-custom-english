@@ -6,6 +6,7 @@ import PlanPicker from '../components/PlanPicker';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { getWords, deleteWord } from '../services/api';
+import { PIX_AVULSO_BY_TIER } from '../config/plans';
 
 export default function Dashboard() {
   const { user }              = useAuth();
@@ -58,8 +59,8 @@ export default function Dashboard() {
     w.contexto?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const isSubscribed   = subscription && subscription.status === 'ativo';
-  const isExpiredPix   = subscription?.status === 'expirado' && subscription?.payment_provider === 'mercadopago';
+  const isSubscribed = subscription && subscription.status === 'ativo';
+  const isExpiredPix = subscription?.status === 'expirado' && subscription?.payment_provider === 'mercadopago';
 
   if (subLoading) {
     return (
@@ -72,7 +73,7 @@ export default function Dashboard() {
   if (!isSubscribed) {
     return (
       <Layout>
-        {isExpiredPix ? <ExpiredPixScreen /> : <PlanPicker />}
+        {isExpiredPix ? <ExpiredPixScreen sub={subscription} /> : <PlanPicker />}
       </Layout>
     );
   }
@@ -229,16 +230,21 @@ function Empty({ onAdd }) {
   );
 }
 
-function ExpiredPixScreen() {
+function ExpiredPixScreen({ sub }) {
   const nav = useNavigate();
+  // Normalize legacy "Pix-10" tier to "avulso_10"
+  const rawTier = sub?.plano || 'avulso_10';
+  const tier    = rawTier.startsWith('avulso_') ? rawTier : 'avulso_10';
+  const plan    = PIX_AVULSO_BY_TIER[tier] || PIX_AVULSO_BY_TIER['avulso_10'];
+
   return (
-    <div style={{ textAlign: 'center', padding: '60px 24px', maxWidth: 520, margin: '0 auto' }}>
+    <div style={{ textAlign: 'center', padding: '60px 24px', maxWidth: 540, margin: '0 auto' }}>
       <div style={{ fontSize: '3rem', marginBottom: 16 }}>⏰</div>
       <h2 style={{ color: '#1E3A6A', fontSize: '1.4rem', fontWeight: 700, marginBottom: 10 }}>
         Seu acesso Pix expirou
       </h2>
       <p style={{ color: '#64748b', marginBottom: 28, lineHeight: 1.7 }}>
-        Por R$ 39,90 você teve <strong>10 palavras por 30 dias</strong> — ótimo para começar.
+        Por {plan.price} você teve <strong>{plan.limit} palavras por 30 dias</strong> — ótimo para começar.
       </p>
       <div style={{
         background: '#f0f9ff', border: '1.5px solid #bae6fd',
@@ -247,20 +253,20 @@ function ExpiredPixScreen() {
         <strong style={{ color: '#0369a1', fontSize: '.9rem' }}>Quer continuar aprendendo?</strong>
         <p style={{ color: '#475569', fontSize: '.88rem', margin: '8px 0 0', lineHeight: 1.7 }}>
           Com o plano <strong>Professional</strong> (R$ 39,90/mês) você tem{' '}
-          <strong>15 palavras</strong> renovadas automaticamente todo mês — 50% mais vocabulário,
-          sem precisar pagar de novo.
+          <strong>15 palavras</strong> renovadas automaticamente todo mês —
+          sem precisar pagar de novo a cada 30 dias.
         </p>
       </div>
       <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
         <button
-          onClick={() => nav('/pix-payment')}
+          onClick={() => nav(`/pix-payment?tier=${tier}`)}
           style={{
             background: '#fff', color: '#1E3A6A',
             border: '1.5px solid #1E3A6A', padding: '11px 22px',
             borderRadius: 8, fontSize: '.9rem', fontWeight: 600, cursor: 'pointer',
           }}
         >
-          Renovar Pix (10 palavras / 30 dias)
+          Renovar Pix ({plan.limit} palavras / 30 dias)
         </button>
         <button
           onClick={() => nav('/planos')}
@@ -277,11 +283,13 @@ function ExpiredPixScreen() {
   );
 }
 
+const _PIX_LABELS = { avulso_10: 'Avulso 10', avulso_15: 'Avulso 15', avulso_20: 'Avulso 20', 'Pix-10': 'Avulso 10' };
+
 function SubscriptionBar({ sub }) {
   const disp  = sub.palavras_disponiveis ?? 0;
   // Use limite_palavras (new format) with fallback to plano if it's a number (old format)
   const total = sub.limite_palavras ?? (typeof sub.plano === 'number' ? sub.plano : 10);
-  const tier  = typeof sub.plano === 'string' ? sub.plano : null;
+  const tier  = typeof sub.plano === 'string' ? (_PIX_LABELS[sub.plano] || sub.plano) : null;
   const used  = total - disp;
   const pct   = Math.min(100, Math.round((used / total) * 100));
   const color = disp === 0 ? '#ef4444' : disp <= total * 0.25 ? '#f59e0b' : '#22c55e';
@@ -297,7 +305,7 @@ function SubscriptionBar({ sub }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
           <span style={{ fontSize: '.82rem', fontWeight: 600, color: '#475569' }}>
             {tier ? `Plano ${tier}` : 'Plano'} —{' '}
-            {sub.payment_provider === 'mercadopago' ? 'palavras restantes (30 dias)' : 'palavras restantes este mês'}
+            {sub.payment_provider === 'mercadopago' ? 'palavras restantes (30 dias de acesso)' : 'palavras restantes este mês'}
           </span>
           <span style={{ fontSize: '.82rem', fontWeight: 700, color }}>
             {disp}/{total}

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Briefcase, Sparkles, Headphones } from 'lucide-react';
 import logoManoa from '../logo-manoa.png';
-import { PLAN_CATALOG } from '../config/plans';
+import { PLAN_CATALOG, PIX_AVULSO_CATALOG } from '../config/plans';
 
 function useReveal(delay = 0) {
   const ref = useRef(null);
@@ -242,6 +242,15 @@ function TestiCard({ t, delay, highlight }) {
   );
 }
 
+function LandingSectionLabel({ title, sub }) {
+  return (
+    <div style={{ textAlign:'center', marginBottom:28 }}>
+      <h3 style={{ color:'#EEF5FF', fontSize:'1.05rem', fontWeight:700, marginBottom:4 }}>{title}</h3>
+      <p style={{ color:'#94A3B8', fontSize:13 }}>{sub}</p>
+    </div>
+  );
+}
+
 function PlanCard({ plan, delay, onAssinar }) {
   const r = useReveal(delay);
   return (
@@ -374,35 +383,54 @@ export default function LandingPage() {
           <div ref={planH.ref} style={planH.style}>
             <SectionHead tag="Planos" title="Escolha o seu plano" sub="Todos incluem exercícios personalizados, áudio nativo e vocabulário da sua profissão." />
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:24, alignItems:'center' }}>
-            {PLANS.map((p,i) => <PlanCard key={p.id} plan={p} delay={i*100} onAssinar={handleAssinar} />)}
-            {/* Pix one-time card */}
-            <div style={{
-              background: '#0E2040', border: '2px dashed rgba(34,197,94,0.4)',
-              borderRadius: 16, padding: '32px 24px', position: 'relative',
-            }}>
-              <div style={{ position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)', background:'#16a34a', color:'#fff', fontSize:10, fontWeight:800, padding:'4px 16px', borderRadius:12, whiteSpace:'nowrap', letterSpacing:.5 }}>
-                PAGUE UMA VEZ
-              </div>
-              <div style={{ fontSize:11, color:'#86efac', fontWeight:800, letterSpacing:1, marginBottom:8 }}>PACOTE AVULSO PIX</div>
-              <div style={{ fontSize:'clamp(2rem,4vw,2.5rem)', fontWeight:900, letterSpacing:'-1.5px', marginBottom:2, color:'#EEF5FF' }}>R$ 39,90</div>
-              <div style={{ fontSize:12, color:'#94A3B8', marginBottom:26 }}>pagamento único · 10 palavras · 30 dias</div>
-              <div style={{ borderTop:'1px solid rgba(34,197,94,0.15)', paddingTop:20, marginBottom:26, display:'flex', flexDirection:'column', gap:10 }}>
-                {FEATURES.map(feat => (
-                  <div key={feat} style={{ fontSize:13, color:'#CBD5E1' }}>
-                    <span style={{ color:'#22c55e', fontWeight:700, marginRight:8 }}>✓</span>{feat}
+          {/* Assinatura */}
+          <div style={{ marginBottom: 16 }}>
+            <LandingSectionLabel title="Assinatura mensal" sub="Renova automaticamente. Cancele quando quiser." />
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:24, alignItems:'center' }}>
+              {PLANS.map((p,i) => <PlanCard key={p.id} plan={p} delay={i*100} onAssinar={handleAssinar} />)}
+            </div>
+          </div>
+
+          {/* Separador */}
+          <div style={{ display:'flex', alignItems:'center', gap:20, margin:'44px 0' }}>
+            <div style={{ flex:1, height:1, background:'rgba(148,163,184,0.2)' }} />
+            <span style={{ color:'#64748b', fontSize:13, fontWeight:600, whiteSpace:'nowrap' }}>ou experimente sem compromisso</span>
+            <div style={{ flex:1, height:1, background:'rgba(148,163,184,0.2)' }} />
+          </div>
+
+          {/* Avulso */}
+          <div>
+            <LandingSectionLabel title="Pacote avulso via Pix" sub="Pague uma vez, use por 30 dias. Sem renovação automática." />
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:24, alignItems:'start' }}>
+              {PIX_AVULSO_CATALOG.map(p => (
+                <div key={p.tier} style={{
+                  background: '#0E2040', border: '2px dashed rgba(34,197,94,0.4)',
+                  borderRadius: 16, padding: '32px 24px', position: 'relative',
+                }}>
+                  <div style={{ position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)', background:'#16a34a', color:'#fff', fontSize:10, fontWeight:800, padding:'4px 16px', borderRadius:12, whiteSpace:'nowrap', letterSpacing:.5 }}>
+                    PAGUE UMA VEZ
                   </div>
-                ))}
-                <div style={{ fontSize:13, color:'#64748b' }}>
-                  <span style={{ color:'#475569', fontWeight:700, marginRight:8 }}>○</span>Sem renovação automática
+                  <div style={{ fontSize:11, color:'#86efac', fontWeight:800, letterSpacing:1, marginBottom:8 }}>AVULSO {p.limit} PALAVRAS</div>
+                  <div style={{ fontSize:'clamp(2rem,4vw,2.5rem)', fontWeight:900, letterSpacing:'-1.5px', marginBottom:2, color:'#EEF5FF' }}>{p.price}</div>
+                  <div style={{ fontSize:12, color:'#94A3B8', marginBottom:26 }}>pagamento único · {p.limit} palavras · 30 dias</div>
+                  <div style={{ borderTop:'1px solid rgba(34,197,94,0.15)', paddingTop:20, marginBottom:26, display:'flex', flexDirection:'column', gap:10 }}>
+                    {FEATURES.map(feat => (
+                      <div key={feat} style={{ fontSize:13, color:'#CBD5E1' }}>
+                        <span style={{ color:'#22c55e', fontWeight:700, marginRight:8 }}>✓</span>{feat}
+                      </div>
+                    ))}
+                    <div style={{ fontSize:13, color:'#64748b' }}>
+                      <span style={{ color:'#475569', fontWeight:700, marginRight:8 }}>○</span>Sem renovação automática
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => nav(user ? `/pix-payment?tier=${p.tier}` : '/cadastro')}
+                    style={{ width:'100%', padding:13, borderRadius:9, background:'#16a34a', color:'#fff', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}
+                  >
+                    Pagar com Pix
+                  </button>
                 </div>
-              </div>
-              <button
-                onClick={() => nav(user ? '/pix-payment' : '/cadastro')}
-                style={{ width:'100%', padding:13, borderRadius:9, background:'#16a34a', color:'#fff', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}
-              >
-                Pagar com Pix
-              </button>
+              ))}
             </div>
           </div>
         </div>
