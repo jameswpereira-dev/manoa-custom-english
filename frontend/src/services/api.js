@@ -64,3 +64,9 @@ export async function createCheckoutSession(plan) {
   const { data } = await axios.post(`${BASE}/api/create-checkout-session`, { plan }, { headers });
   return data;
 }
+
+export async function createPixPayment(tier) {
+  const headers = await authHeaders();
+  const { data } = await axios.post(`${BASE}/api/create-pix-mercadopago-payment`, { tier }, { headers });
+  return data;
+}

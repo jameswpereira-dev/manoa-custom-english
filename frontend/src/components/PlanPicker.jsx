@@ -1,12 +1,17 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Btn from './Btn';
+import { PIX_AVULSO_CATALOG } from '../config/pixPlans';
+
+const GREEN = '#16a34a';
 
 const PLANS = [
   { id:20, name:'Starter',      price:'R$ 29,90', words:'20 palavras/mês', popular:false },
   { id:30, name:'Professional', price:'R$ 39,90', words:'30 palavras/mês', popular:true  },
   { id:40, name:'Expert',       price:'R$ 49,90', words:'40 palavras/mês', popular:false },
 ];
+
+const PIX_PLAN = PIX_AVULSO_CATALOG[0];
 
 const FEATURES = [
   'Vocabulário da sua área',
@@ -73,6 +78,49 @@ export default function PlanPicker() {
             </Btn>
           </div>
         ))}
+
+        {/* Pix avulso — Mercado Pago, pagamento único, sem assinatura */}
+        <div style={{
+          background: '#fff', color: '#1e293b',
+          borderRadius: 16, padding: '32px 24px',
+          boxShadow: '0 2px 10px rgba(0,0,0,.06)',
+          border: '2px dashed #86efac',
+          position: 'relative', textAlign: 'center',
+        }}>
+          <div style={{
+            position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)',
+            background: GREEN, color: '#fff', fontSize: '.7rem', fontWeight: 700,
+            padding: '4px 16px', borderRadius: 20, whiteSpace: 'nowrap',
+          }}>
+            Pague uma vez
+          </div>
+          <div style={{ fontSize: '.82rem', fontWeight: 700, marginBottom: 6, color: '#64748b' }}>
+            AVULSO PIX
+          </div>
+          <div style={{ fontSize: '2.1rem', fontWeight: 800, marginBottom: 2 }}>{PIX_PLAN.price}</div>
+          <div style={{ fontSize: '.82rem', opacity: .75, marginBottom: 18 }}>
+            pagamento único · {PIX_PLAN.limit} palavras · 30 dias
+          </div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 26px', textAlign: 'left' }}>
+            {FEATURES.map(f => (
+              <li key={f} style={{ fontSize: '.86rem', marginBottom: 8, display: 'flex', gap: 8 }}>
+                <span style={{ color: GREEN, fontWeight: 700 }}>✓</span>
+                <span>{f}</span>
+              </li>
+            ))}
+            <li style={{ fontSize: '.86rem', marginBottom: 8, display: 'flex', gap: 8 }}>
+              <span style={{ color: '#94a3b8', fontWeight: 700 }}>○</span>
+              <span style={{ color: '#94a3b8' }}>Sem renovação automática</span>
+            </li>
+          </ul>
+          <Btn
+            fullWidth
+            onClick={() => nav(`/pix-payment?tier=${PIX_PLAN.tier}`)}
+            style={{ background: GREEN }}
+          >
+            Pagar com Pix
+          </Btn>
+        </div>
       </div>
     </div>
   );
